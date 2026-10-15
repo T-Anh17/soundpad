@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SoundPad</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f4f4f5; --card: #fff; --fg: #18181b; --mut: #6b6b74; --line: #e4e4e7; --line-strong: #d4d4d8;
+    --acc: #2563eb; --on-acc: #fff; --ring: #2563eb33; --bad: #c81e1e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0b0e; --card: #17171b; --fg: #f4f4f5; --mut: #a1a1aa; --line: #2a2a30; --line-strong: #3f3f46;
+      --acc: #60a5fa; --on-acc: #0b1220; --ring: #60a5fa40; --bad: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 480px; margin: 0 auto; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; margin: 4px 0 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+  .mut { color: var(--mut); font-size: 13px; }
+  .err { color: var(--bad); }
+
+  .banner { display: flex; align-items: center; gap: 12px; border-color: var(--bad); }
+  .banner div { flex: 1; min-width: 0; }
+  .banner b { display: block; color: var(--bad); font-weight: 600; }
+
+  .vol { display: flex; align-items: center; gap: 12px; }
+  .vol b { min-width: 3em; text-align: right; font-variant-numeric: tabular-nums; }
+  .vol input { --p: 0%; flex: 1; min-width: 0; height: 32px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+  .vol input:disabled { opacity: .35; cursor: default; }
+  .vol input::-webkit-slider-runnable-track { height: 6px; border-radius: 3px;
+    background: linear-gradient(var(--acc), var(--acc)) 0 / var(--p) 100% no-repeat, var(--line); }
+  .vol input::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -7px;
+    border-radius: 50%; background: var(--card); border: 2px solid var(--acc); }
+  .vol input::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line); }
+  .vol input::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--acc); }
+  .vol input::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--card); border: 2px solid var(--acc); }
+
+  .key { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; transition: border-color .15s, box-shadow .15s; }
+  .key.on { border-color: var(--acc); box-shadow: 0 0 0 3px var(--ring); }
+  .key .name { font-weight: 600; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .key .name.empty { color: var(--mut); font-weight: 400; }
+  .key .btns { grid-row: span 2; display: flex; gap: 6px; }
+  .bar { grid-column: 1 / -1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--acc); }
+
+  button { font: inherit; font-size: 14px; border: 1px solid var(--line); background: transparent; color: var(--fg);
+    border-radius: 8px; padding: 7px 11px; cursor: pointer; line-height: 1.2; }
+  button:disabled { opacity: .35; cursor: default; }
+  .pri { background: var(--acc); border-color: var(--acc); color: var(--on-acc); }
+
+  /* ---- Hộp chọn đoạn ---- */
+  dialog { width: min(440px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 0; color: var(--fg);
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / .25);
+    opacity: 0; scale: .95;
+    transition: opacity .1s ease-in, scale .1s ease-in, overlay .1s allow-discrete, display .1s allow-discrete; }
+  dialog[open] { display: flex; flex-direction: column; opacity: 1; scale: 1; transition-duration: .15s; transition-timing-function: ease-out; }
+  @starting-style { dialog[open] { opacity: 0; scale: .95; } }
+  dialog::backdrop { background: rgb(0 0 0 / 0); transition: background .1s ease-in, overlay .1s allow-discrete, display .1s allow-discrete; }
+  dialog[open]::backdrop { background: rgb(0 0 0 / .4); transition-duration: .15s; }
+  @starting-style { dialog[open]::backdrop { background: rgb(0 0 0 / 0); } }
+  @media (prefers-reduced-motion: reduce) { dialog, dialog[open] { scale: 1; } }
+
+  .dlg-head { position: relative; padding: 20px 60px 0 20px; }
+  .dlg-head h2 { font-size: 17px; margin: 0; outline: none; }
+  .dlg-head p { margin: 4px 0 0; overflow-wrap: anywhere; }
+  .dlg-head .x { position: absolute; top: 14px; right: 14px; }
+  .dlg-body { display: grid; gap: 14px; padding: 18px 20px; overflow: auto; }
+  .dlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 0 20px 20px; }
+  .dlg-foot button { min-height: 44px; padding: 0 16px; }
+
+  .wave { display: block; width: 100%; height: 56px; }
+  .range { position: relative; height: 44px; margin: -10px 0 -6px; touch-action: none; cursor: pointer; }
+  .range .rail, .range .sel { position: absolute; top: 19px; height: 6px; border-radius: 3px; }
+  .range .rail { left: 0; right: 0; background: var(--line); }
+  .range .sel { background: var(--acc); }
+  .range .th { position: absolute; top: 12px; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%;
+    background: var(--card); border: 2px solid var(--acc); outline: none; }
+  /* nới vùng bấm ra 44×44 mà tay cầm vẫn 20px (số âm có chủ ý) */
+  .range .th::before { content: ""; position: absolute; inset: -14px; }
+  .range .th:focus-visible { box-shadow: 0 0 0 4px var(--ring); }
+  .ends { display: flex; justify-content: space-between; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .times label { display: grid; gap: 4px; font-size: 13px; color: var(--mut); }
+  .times input { width: 100%; height: 44px; padding: 0 12px; font: inherit; font-size: 16px; font-variant-numeric: tabular-nums;
+    color: var(--fg); background: var(--card); border: 1px solid var(--line-strong); border-radius: 8px; }
+  .times input:focus { outline: none; border-color: var(--acc); box-shadow: 0 0 0 3px var(--ring); }
+  .prev { display: flex; align-items: center; gap: 12px; }
+  .prev button { flex-shrink: 0; min-height: 36px; }
+  .prev span { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>SoundPad</h1>
+    <span class="mut" id="bat"></span>
+  </header>
+
+  <div class="card banner" id="offline" hidden>
+    <div>
+      <b>Mất kết nối với SoundPad</b>
+      <span class="mut">Bật lại WiFi bằng nút KEY trên board, vào lại mạng SoundPad rồi bấm Thử lại.</span>
+    </div>
+    <button id="retry">Thử lại</button>
+  </div>
+
+  <div class="card">
+    <div class="mut">Âm lượng</div>
+    <div class="vol"><input type="range" id="vol" min="0" max="100" disabled><b id="volv">–</b></div>
+  </div>
+
+  <div id="keys"></div>
+
+  <p class="mut" id="store"></p>
+</main>
+
+<dialog id="trim" aria-labelledby="trimTitle">
+  <div class="dlg-head">
+    <h2 id="trimTitle" tabindex="-1" autofocus></h2>
+    <p class="mut" id="trimFile"></p>
+    <button class="x" id="trimX" title="Đóng">✕</button>
+  </div>
+  <div class="dlg-body">
+    <div>
+      <canvas class="wave" id="wave"></canvas>
+      <div class="range" id="rng">
+        <div class="rail"></div><div class="sel" id="rngSel"></div>
+        <span class="th" id="thA" role="slider" tabindex="0" aria-label="Bắt đầu"></span>
+        <span class="th" id="thB" role="slider" tabindex="0" aria-label="Kết thúc"></span>
+      </div>
+      <div class="ends mut"><span>0,0</span><span id="endMax"></span></div>
+    </div>
+    <div class="times">
+      <label>Từ<input id="inA" inputmode="decimal" autocomplete="off"></label>
+      <label>Đến<input id="inB" inputmode="decimal" autocomplete="off"></label>
+    </div>
+    <div class="prev">
+      <button id="trimPlay">▶ Nghe thử</button>
+      <span class="mut" id="trimInfo"></span>
+    </div>
+    <div class="mut err" id="trimErr" hidden></div>
+  </div>
+  <div class="dlg-foot">
+    <button id="trimCancel">Huỷ</button>
+    <button class="pri" id="trimSave"></button>
+  </div>
+</dialog>
+
+<script>
+const RATE = 22050, N = 4;
+const MAX_FILE = 300e6;  // video lớn hơn thì điện thoại dễ hết RAM khi tách tiếng
+const $ = s => document.querySelector(s);
+const secs = bytes => bytes * 2 / RATE;  // ADPCM 4-bit: 1 byte = 2 mẫu
+const num = (x, d = 1) => x.toFixed(d).replace('.', ',');
+const sec = bytes => num(secs(bytes)) + ' giây';
+const dur = bytes => {
+  const s = Math.floor(secs(bytes)), m = Math.floor(s / 60);
+  return m ? `${m} phút ${s % 60} giây` : `${s} giây`;
+};
+const kb = bytes => Math.max(1, Math.round(bytes / 1024)).toLocaleString('vi-VN') + ' KB';
+let info = null, busy = 0, online = null;
+
+// ---- Gọi thiết bị: lỗi hoặc quá 4 giây không trả lời -> báo mất kết nối ----
+async function req(url, method = 'GET') {
+  try {
+    const signal = AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined;
+    const r = await fetch(url, { method, signal, cache: 'no-store' });
+    if (!r.ok) throw new Error();
+    setOnline(true);
+    return r;
+  } catch (e) {
+    setOnline(false);
+    throw new Error('Mất kết nối với thiết bị');
+  }
+}
+const post = url => req(url, 'POST');
+
+function setOnline(ok) {
+  if (ok === online) return;
+  online = ok;
+  $('#offline').hidden = ok;
+  if (!ok) {
+    document.querySelectorAll('#keys button, #vol').forEach(b => b.disabled = true);
+    showPlaying(-1);
+  }
+}
+
+// ---- Dựng 4 ô phím ----
+$('#keys').innerHTML = [...Array(N)].map((_, i) => `
+  <div class="card key" id="k${i}">
+    <div class="name"></div>
+    <div class="btns">
+      <button class="pri" data-a="play" title="Phát thử" disabled>▶</button>
+      <button data-a="pick" disabled>Đổi</button>
+      <input type="file" accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.aac,.mp4,.mov" hidden>
+      <button data-a="del" title="Xoá" disabled>✕</button>
+    </div>
+    <div class="mut meta"></div>
+    <div class="bar" hidden><i></i></div>
+  </div>`).join('');
+
+for (let i = 0; i < N; i++) {
+  const k = $('#k' + i);
+  k.querySelector('[data-a=play]').onclick = () => post('/play?btn=' + (i + 1)).catch(() => {});
+  k.querySelector('[data-a=del]').onclick = async () => {
+    if (!confirm(`Xoá âm thanh phím ${i + 1}?`)) return;
+    try { await post('/delete?btn=' + (i + 1)); await load(); } catch (e) {}
+  };
+  const file = k.querySelector('input[type=file]');
+  k.querySelector('[data-a=pick]').onclick = () => file.click();
+  file.onchange = () => { if (file.files[0]) replaceSound(i, file.files[0]); file.value = ''; };
+}
+
+// ---- Hiển thị trạng thái ----
+function render() {
+  setVol(info.vol);
+  $('#vol').disabled = false;
+  showBat(info.bat);
+  info.keys.forEach((s, i) => {
+    const k = $('#k' + i);
+    if (k.dataset.busy) return;
+    const name = k.querySelector('.name');
+    name.textContent = `${i + 1}. ` + (s.size ? (s.name || 'Không tên') : 'Chưa có âm thanh');
+    name.title = name.textContent;
+    name.classList.toggle('empty', !s.size);
+    const meta = k.querySelector('.meta');
+    meta.className = 'mut meta';
+    meta.textContent = s.size ? sec(s.size) : '';
+    k.querySelector('[data-a=play]').disabled = !s.size;
+    k.querySelector('[data-a=pick]').disabled = false;
+    k.querySelector('[data-a=del]').disabled = !s.size;
+  });
+  $('#store').textContent = `Bộ nhớ còn trống khoảng ${dur(info.free)} âm thanh`;
+  showPlaying(info.playing);
+}
+
+function setVol(v) {
+  $('#vol').value = v;
+  $('#vol').style.setProperty('--p', v + '%');
+  $('#volv').textContent = v + '%';
+}
+
+function showBat(b) {
+  $('#bat').textContent = b >= 0 ? `Pin ${b}%` : '';
+  $('#bat').classList.toggle('err', b >= 0 && b < 20);
+}
+
+function showPlaying(p) {
+  for (let i = 0; i < N; i++) $('#k' + i).classList.toggle('on', i === p);
+}
+
+async function load() {
+  info = await (await req('/info')).json();
+  render();
+}
+
+$('#retry').onclick = async e => {
+  e.target.disabled = true;
+  await load().catch(() => {});
+  e.target.disabled = false;
+};
+
+// ---- Âm lượng: gửi khi kéo, lưu khi thả tay ----
+let volTimer = 0, volTouched = 0;
+$('#vol').oninput = e => {
+  volTouched = Date.now();
+  e.target.style.setProperty('--p', e.target.value + '%');
+  $('#volv').textContent = e.target.value + '%';
+  clearTimeout(volTimer);
+  volTimer = setTimeout(() => post('/volume?v=' + e.target.value).catch(() => {}), 60);
+};
+$('#vol').onchange = e => post('/volume?save=1&v=' + e.target.value).catch(() => {});
+
+// ---- Đọc file âm thanh hoặc video -> mẫu mono 22050 Hz ----
+async function decodeFile(file) {
+  const isVideo = file.type.startsWith('video');
+  if (file.size > MAX_FILE)
+    throw new Error(`File nặng ${Math.round(file.size / 1e6)} MB, chọn file dưới ${MAX_FILE / 1e6} MB`);
+  const data = await file.arrayBuffer();
+  const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  let audio;
+  try {
+    // giải mã thẳng ở 22050 Hz cho đỡ tốn RAM với video dài
+    audio = await new Promise((ok, fail) => {
+      const p = new Ctx(1, 1, RATE).decodeAudioData(data, ok, fail);
+      if (p && p.catch) p.catch(fail);
+    });
+  } catch (e) {
+    throw new Error(isVideo ? 'Không tách được âm thanh: video không có tiếng hoặc định dạng chưa hỗ trợ'
+                            : 'Không đọc được file này');
+  }
+  const n = audio.length, ch = audio.numberOfChannels, out = new Float32Array(n);
+  for (let c = 0; c < ch; c++) {
+    const d = audio.getChannelData(c);
+    for (let i = 0; i < n; i++) out[i] += d[i] / ch;
+  }
+  if (!n) throw new Error('File này không có âm thanh');
+  return out;
+}
+
+// Cắt lặng hai đầu, chuẩn hoá. Trả null nếu đoạn gần như không có tiếng
+function prepare(d) {
+  let a = 0, b = d.length - 1;
+  while (a < b && Math.abs(d[a]) < 0.01) a++;
+  while (b > a && Math.abs(d[b]) < 0.01) b--;
+  if (b - a < RATE * 0.02) return null;
+  d = d.subarray(Math.max(0, a - (RATE * 0.01 | 0)), Math.min(d.length, b + (RATE * 0.05 | 0)));
+  let peak = 0;
+  for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+  const out = new Float32Array(d.length), g = 0.95 / peak;
+  for (let i = 0; i < d.length; i++) out[i] = d[i] * g;
+  return out;
+}
+
+// ---- Nén IMA ADPCM 4-bit, phải khớp từng bước với Adpcm::next() trong esp/src/audio.cpp ----
+const IMA_STEP = [7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88,
+  97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658,
+  724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660,
+  4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818,
+  18500, 20350, 22385, 24623, 27086, 29794, 32767];
+const IMA_INDEX = [-1, -1, -1, -1, 2, 4, 6, 8];
+
+function encodeAdpcm(f) {
+  const out = new Uint8Array((f.length + 1) >> 1);
+  let pred = 0, idx = 0;
+  for (let i = 0; i < f.length; i++) {
+    const s = Math.max(-32768, Math.min(32767, Math.round(f[i] * 32767)));
+    const step = IMA_STEP[idx];
+    let diff = s - pred, n = 0;
+    if (diff < 0) { n = 8; diff = -diff; }
+    if (diff >= step) { n |= 4; diff -= step; }
+    if (diff >= step >> 1) { n |= 2; diff -= step >> 1; }
+    if (diff >= step >> 2) n |= 1;
+    // giải mã lại y như board để hai bên đi cùng một trạng thái
+    let d = step >> 3;
+    if (n & 4) d += step;
+    if (n & 2) d += step >> 1;
+    if (n & 1) d += step >> 2;
+    pred = Math.max(-32768, Math.min(32767, n & 8 ? pred - d : pred + d));
+    idx = Math.max(0, Math.min(88, idx + IMA_INDEX[n & 7]));
+    out[i >> 1] |= i & 1 ? n << 4 : n;
+  }
+  return out;
+}
+
+// ---- Hộp chọn đoạn: sóng âm, kéo hai đầu, nghe thử rồi mới lưu ----
+const dlg = $('#trim'), wave = $('#wave'), rng = $('#rng'), thA = $('#thA'), thB = $('#thB'), inA = $('#inA'), inB = $('#inB');
+const MIN_LEN = RATE * 0.1;
+let T = null;  // { i, pcm, a, b, peaks, resolve }
+
+const fmt = t => {
+  t = Math.round(t * 10) / 10;
+  const m = Math.floor(t / 60), s = num(t - m * 60);
+  return m ? `${m}:${s.padStart(4, '0')}` : s;
+};
+const fmtLen = t => t < 60 ? num(t) + ' giây' : `${Math.floor(t / 60)} phút ${Math.round(t % 60)} giây`;
+const parse = s => {  // "12,4" hoặc "1:05,2" -> giây
+  const p = s.trim().replace(',', '.').split(':').map(Number);
+  const t = p.length === 2 ? p[0] * 60 + p[1] : p[0];
+  return p.length > 2 || isNaN(t) ? null : t;
+};
+
+function pickSegment(i, name, pcm) {
+  // Mặc định: từ chỗ bắt đầu có tiếng; tiếng dài quá 20 giây thì lấy 10 giây đầu
+  let a = 0, b = pcm.length - 1;
+  while (a < b && Math.abs(pcm[a]) < 0.01) a++;
+  while (b > a && Math.abs(pcm[b]) < 0.01) b--;
+  if (b - a < MIN_LEN) { a = 0; b = pcm.length; }
+  if (b - a > RATE * 20) b = a + RATE * 10;
+  T = { i, pcm, a, b: Math.min(pcm.length, Math.max(b, a + MIN_LEN)), peaks: null };
+
+  $('#trimTitle').textContent = `Chọn đoạn cho phím ${i + 1}`;
+  $('#trimFile').textContent = name;
+  $('#trimSave').textContent = `Lưu vào phím ${i + 1}`;
+  $('#endMax').textContent = fmt(pcm.length / RATE);
+  $('#trimErr').hidden = true;
+  dlg.showModal();
+  updateTrim();
+  return new Promise(r => T.resolve = r);
+}
+
+function closeTrim(result) {
+  stopPreview();
+  dlg.close();
+  const r = T.resolve;
+  T = null;
+  r(result);
+}
+
+function drawWave() {
+  const dpr = window.devicePixelRatio || 1, cols = Math.round(wave.clientWidth * dpr), h = Math.round(wave.clientHeight * dpr);
+  if (!cols) return;
+  if (!T.peaks || T.peaks.length !== cols) {
+    const pk = new Float32Array(cols), per = T.pcm.length / cols;
+    let top = 0;
+    for (let x = 0; x < cols; x++) {
+      let m = 0;
+      for (let j = Math.floor(x * per), e = Math.floor((x + 1) * per); j < e; j++) m = Math.max(m, Math.abs(T.pcm[j]));
+      pk[x] = m; top = Math.max(top, m);
+    }
+    if (top) for (let x = 0; x < cols; x++) pk[x] /= top;
+    T.peaks = pk;
+  }
+  wave.width = cols; wave.height = h;
+  const g = wave.getContext('2d'), cs = getComputedStyle(document.body);
+  const on = cs.getPropertyValue('--acc'), off = cs.getPropertyValue('--line-strong');
+  const sa = T.a / T.pcm.length * cols, sb = T.b / T.pcm.length * cols;
+  for (let x = 0; x < cols; x++) {
+    const bh = Math.max(dpr, T.peaks[x] * h);
+    g.fillStyle = x >= sa && x <= sb ? on : off;
+    g.fillRect(x, (h - bh) / 2, 1, bh);
+  }
+}
+
+function updateTrim() {
+  const n = T.pcm.length, pa = T.a / n * 100, pb = T.b / n * 100;
+  thA.style.left = pa + '%';
+  thB.style.left = pb + '%';
+  $('#rngSel').style.left = pa + '%';
+  $('#rngSel').style.width = (pb - pa) + '%';
+  for (const [th, inp, v] of [[thA, inA, T.a], [thB, inB, T.b]]) {
+    th.setAttribute('aria-valuemin', 0);
+    th.setAttribute('aria-valuemax', num(n / RATE));
+    th.setAttribute('aria-valuenow', num(v / RATE));
+    th.setAttribute('aria-valuetext', fmt(v / RATE));
+    if (document.activeElement !== inp) inp.value = fmt(v / RATE);
+  }
+  const bytes = Math.ceil((T.b - T.a) / 2), room = info.free + info.keys[T.i].size - 65536;
+  const keep = s => s.replace(/ /g, ' ');  // xuống dòng chỉ ở dấu ·, không bẻ "108 KB"
+  $('#trimInfo').textContent = keep(`Đoạn dài ${fmtLen((T.b - T.a) / RATE)}`) + ' · ' + keep(`khoảng ${kb(bytes)}`);
+  const over = bytes > room;
+  $('#trimSave').disabled = over;
+  showTrimErr(over ? `Dài quá, bộ nhớ chỉ còn chỗ cho ${dur(Math.max(0, room))}` : '');
+  drawWave();
+}
+
+function showTrimErr(msg) {
+  $('#trimErr').hidden = !msg;
+  $('#trimErr').textContent = msg;
+}
+
+function setA(x) { T.a = Math.round(Math.max(0, Math.min(x, T.b - MIN_LEN))); }
+function setB(x) { T.b = Math.round(Math.min(T.pcm.length, Math.max(x, T.a + MIN_LEN))); }
+
+// Kéo trên dải: tay cầm gần nhất chạy tới; hai tay cầm chạm nhau thì dừng, không vượt qua
+let drag = null;
+const sampleAt = e => {
+  const r = rng.getBoundingClientRect();
+  return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * T.pcm.length;
+};
+const dragTo = e => { const x = sampleAt(e); drag === 'a' ? setA(x) : setB(x); updateTrim(); };
+rng.onpointerdown = e => {
+  const x = sampleAt(e);
+  drag = x < T.a ? 'a' : x > T.b ? 'b' : (x - T.a < T.b - x ? 'a' : 'b');
+  rng.setPointerCapture(e.pointerId);
+  (drag === 'a' ? thA : thB).focus({ preventScroll: true });
+  e.preventDefault();
+  stopPreview();
+  dragTo(e);
+};
+rng.onpointermove = e => drag && dragTo(e);
+rng.onpointerup = rng.onpointercancel = () => drag = null;
+
+for (const [th, k] of [[thA, 'a'], [thB, 'b']]) th.onkeydown = e => {
+  const step = { ArrowLeft: -0.1, ArrowDown: -0.1, ArrowRight: 0.1, ArrowUp: 0.1, PageDown: -1, PageUp: 1 }[e.key];
+  let x;
+  if (step != null) x = T[k] + step * RATE;
+  else if (e.key === 'Home') x = 0;
+  else if (e.key === 'End') x = T.pcm.length;
+  else return;
+  e.preventDefault();
+  k === 'a' ? setA(x) : setB(x);
+  stopPreview();
+  updateTrim();
+};
+
+// Ô Từ / Đến chỉ áp khi rời ô hoặc bấm Enter
+for (const [inp, set] of [[inA, setA], [inB, setB]]) inp.onchange = () => {
+  const t = parse(inp.value);
+  if (t != null) { set(t * RATE); stopPreview(); }
+  inp.value = '';  // để updateTrim ghi lại số đã áp
+  inp.blur();
+  updateTrim();
+};
+
+// Nghe thử trên điện thoại đúng thứ sẽ lưu (đã cắt lặng, chuẩn hoá)
+let actx = null, previewSrc = null;
+function stopPreview() {
+  if (previewSrc) { previewSrc.onended = null; previewSrc.stop(); previewSrc = null; }
+  $('#trimPlay').textContent = '▶ Nghe thử';
+}
+$('#trimPlay').onclick = () => {
+  if (previewSrc) return stopPreview();
+  const seg = prepare(T.pcm.subarray(T.a, T.b));
+  if (!seg) return showTrimErr('Đoạn này gần như không có tiếng, kéo sang chỗ khác');
+  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (actx.resume) actx.resume();
+  const buf = actx.createBuffer(1, seg.length, RATE);
+  buf.getChannelData(0).set(seg);
+  previewSrc = actx.createBufferSource();
+  previewSrc.buffer = buf;
+  previewSrc.connect(actx.destination);
+  previewSrc.onended = stopPreview;
+  previewSrc.start();
+  $('#trimPlay').textContent = '■ Dừng';
+};
+
+$('#trimSave').onclick = () => {
+  const seg = prepare(T.pcm.subarray(T.a, T.b));
+  if (!seg) return showTrimErr('Đoạn này gần như không có tiếng, kéo sang chỗ khác');
+  closeTrim(seg);
+};
+$('#trimCancel').onclick = $('#trimX').onclick = () => closeTrim(null);
+dlg.oncancel = e => { e.preventDefault(); closeTrim(null); };  // phím Esc
+window.addEventListener('resize', () => T && drawWave());
+
+// ---- Gửi lên thiết bị ----
+function upload(i, bytes, name, onProgress) {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', new Blob([bytes]), 's.adp');
+    const x = new XMLHttpRequest();
+    x.open('POST', `/upload?btn=${i + 1}&size=${bytes.byteLength}&name=${encodeURIComponent(name)}`);
+    x.upload.onprogress = e => e.lengthComputable && onProgress(e.loaded / e.total);
+    x.onload = () => x.status === 200 ? resolve() : reject(new Error(x.responseText || 'Lỗi ' + x.status));
+    x.onerror = () => reject(new Error('Mất kết nối với thiết bị'));
+    x.send(form);
+  });
+}
+
+async function replaceSound(i, file) {
+  const k = $('#k' + i), meta = k.querySelector('.meta'), bar = k.querySelector('.bar');
+  const name = file.name.replace(/\.[^.]+$/, '');
+  k.dataset.busy = 1;
+  k.querySelectorAll('button').forEach(b => b.disabled = true);
+  meta.className = 'mut meta';
+  let error = '';
+  try {
+    meta.textContent = file.type.startsWith('video') ? 'Đang tách âm thanh…' : 'Đang đọc file…';
+    const seg = await pickSegment(i, name, await decodeFile(file));
+    if (seg) {
+      k.querySelector('.name').textContent = `${i + 1}. ${name}`;
+      bar.hidden = false;
+      busy++;
+      try {
+        await upload(i, encodeAdpcm(seg), name, p => {
+          bar.firstElementChild.style.width = (p * 100).toFixed(0) + '%';
+          meta.textContent = `Đang gửi… ${(p * 100).toFixed(0)}%`;
+        });
+      } finally {
+        busy--;
+      }
+    }
+  } catch (e) {
+    error = e.message;
+  }
+  delete k.dataset.busy;
+  bar.hidden = true;
+  bar.firstElementChild.style.width = '0';
+  await load().catch(() => {});
+  if (error) {
+    meta.className = 'mut meta err';
+    meta.textContent = error;
+  }
+}
+
+// ---- Hỏi thiết bị mỗi giây: sáng phím đang phát + giữ WiFi không tự tắt khi trang đang mở ----
+let polling = false;
+setInterval(async () => {
+  if (busy || polling || document.hidden) return;
+  polling = true;
+  try {
+    const wasOnline = online;
+    const s = await (await req('/state')).json();
+    if (!wasOnline) return await load();  // vừa kết nối lại -> tải lại toàn bộ
+    showPlaying(s.playing);
+    showBat(s.bat);
+    // âm lượng đổi bằng phím thật -> cập nhật thanh kéo (trừ lúc đang kéo)
+    if (info && s.vol !== info.vol && Date.now() - volTouched > 1500) { info.vol = s.vol; setVol(s.vol); }
+  } catch (e) {
+  } finally {
+    polling = false;
+  }
+}, 1000);
+
+// Quay lại tab sau một lúc: tải lại ngay, đừng để trang cũ nằm đó
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !busy) load().catch(() => {});
+});
+
+load().catch(() => {});
+</script>
+</body>
+</html>

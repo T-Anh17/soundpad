@@ -1,0 +1,6 @@
+# 16MB flash: 3MB code, ~12.9MB lưu âm thanh (FFat)
+# Name,   Type, SubType,  Offset,   Size
+nvs,      data, nvs,      0x9000,   0x5000,
+factory,  app,  factory,  0x10000,  0x300000,
+ffat,     data, fat,      0x310000, 0xCE0000,
+coredump, data, coredump, 0xFF0000, 0x10000,
