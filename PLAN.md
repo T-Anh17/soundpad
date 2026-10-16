@@ -90,7 +90,7 @@ Nhấn 1 phím không có âm báo, chỉ phát âm của phím.
 
 ## 6. Lưu âm thanh
 
-- Lưu trong flash 16 MB, phân vùng FFat ~12,8 MB. Âm thanh nén IMA ADPCM 4-bit, 22321 Hz mono (~11 KB/giây) → ~20 phút tổng cộng.
+- Lưu trong flash 16 MB, phân vùng FFat ~12,8 MB. Âm phím lưu PCM 16-bit, 22321 Hz mono (~44 KB/giây) → ~4,8 phút tổng cộng. Không nén ADPCM 4-bit nữa: giọng nói bị "sạn" (SNR ~24 dB), rè ở mọi mức âm lượng. Âm phím bản cũ (`/sN.adp`) vẫn phát được tới khi nạp lại.
 - Mất điện vẫn nhớ âm thanh và âm lượng.
 
 ## 7. Web local
@@ -98,7 +98,7 @@ Nhấn 1 phím không có âm báo, chỉ phát âm của phím.
 - Bật WiFi → điện thoại vào WiFi "SoundPad" (mạng mở) → trang cài đặt tự bật lên (captive portal). Nếu không tự bật: mở trình duyệt vào `192.168.4.1`.
 - Mỗi phím: tên âm thanh, độ dài, nút Phát thử / Đổi (mp3, m4a, wav, hoặc video mp4 / mov) / Xoá.
 - Chọn file xong hiện hộp chọn đoạn: sóng âm, kéo hai đầu hoặc gõ giây Từ / Đến, nghe thử trên điện thoại rồi mới lưu.
-- Trình duyệt tự tách âm thanh khỏi video, đổi định dạng, cắt khoảng lặng, chuẩn hoá âm lượng, nén ADPCM trước khi gửi lên.
+- Trình duyệt tự tách âm thanh khỏi video, đổi định dạng, cắt khoảng lặng, lọc trầm dưới 700 Hz, chỉnh âm cho rõ giọng, nén động nhẹ, chuẩn hoá âm lượng rồi gửi lên dạng PCM 16-bit.
 - Thanh âm lượng (đồng bộ với âm lượng chỉnh bằng phím).
 - Phím đang phát sáng viền. Hiện bộ nhớ còn trống và % pin.
 
