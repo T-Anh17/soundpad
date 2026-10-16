@@ -13,12 +13,12 @@ void audioPlayKey(uint8_t key);  // phát âm của phím (cắt âm đang phát
 void audioTone(Tone t);
 void audioStop();             // dừng và chờ đóng file (trước khi ghi đè/xoá)
 void audioWake();             // vừa chạm phím: bật sẵn ngõ ra trong lúc chờ tổ hợp
-void audioOff();              // hạ mức êm, tắt I2S (không chờ, xem audioIdle) -> ngủ nhẹ
-void audioShutdown();         // hạ mức, tắt hẳn (trước khi ngủ sâu)
+void audioOff();              // tắt ampli và I2S (không chờ, xem audioIdle) -> ngủ nhẹ
+void audioShutdown();         // tắt hẳn (trước khi ngủ sâu)
 
 int  audioPlayingKey();       // phím đang phát, -1 nếu không
 bool audioBusy();             // đang phát âm phím hoặc âm báo
-bool audioIdle();             // đã tắt I2S, chân âm thanh ở mức thấp -> ngủ được
+bool audioIdle();             // đã tắt ampli và I2S -> ngủ được
 
 void    audioSetVolume(uint8_t v);  // 0..100
 uint8_t audioVolume();

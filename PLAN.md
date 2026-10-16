@@ -8,9 +8,8 @@
 |---|---|
 | ESP32-S3 (LilyGO T-Display-S3, màn hình hỏng) | |
 | 4 switch phím cơ `[1] [2] [3] [4]` | GPIO 1 / 2 / 3 / 10, chân còn lại → GND (dùng pull-up trong chip) |
-| Ampli HXJ8002 3W | VCC → 3V3, GND → GND, ngõ ra → loa. Nên gỡ LED trên module |
-| Điện trở 1kΩ + tụ 15nF | GPIO 16 → 1kΩ → chân R ampli; tụ từ chân R xuống GND (lọc tín hiệu PDM) |
-| GPIO 12 | Firmware giữ mức thấp (xung PDM chỉ chạy bên trong), **không nối gì** |
+| Ampli số MAX98357A (I2S, 3W) | VIN → **cực (+) pin, sau công tắc** (không lấy 3V3), GND → (−) pin bằng dây riêng. DIN → GPIO 11, BCLK → GPIO 12, LRC → GPIO 13, SD → GPIO 18. Chân GAIN để trống (9 dB) |
+| Tụ hoá 100–470 µF | Hàn thẳng VIN–GND của module ampli, đúng cực |
 | Loa mini điện thoại | Không nối chân loa nào xuống GND |
 | Pin Li-Po 3.7V 500 mAh, có mạch bảo vệ | Sạc qua USB của board (~500 mA = 1C). Phải gạt công tắc ON mới sạc |
 | Công tắc gạt mini trên dây (+) pin | Tắt hẳn khi cất máy |
@@ -20,14 +19,18 @@ Sơ đồ:
 ```
 Phím [1] [2] [3] [4] ── GPIO 1 / 2 / 3 / 10      chân còn lại ── GND
 
-GPIO 16 ──[1kΩ]──┬──── HXJ8002 R
-                 │
-               [15nF]                             HXJ8002 GND ── GND
-                 │                                HXJ8002 VCC ── 3V3
-GND ─────────────┘
-
-HXJ8002 ngõ ra ── loa
+GPIO 11 ── MAX98357A DIN            MAX98357A VIN  ── (+) pin, sau công tắc, + tụ 100–470µF xuống GND
+GPIO 12 ── MAX98357A BCLK           MAX98357A GND  ── (−) pin (dây riêng; GND board cũng về đây)
+GPIO 13 ── MAX98357A LRC            MAX98357A GAIN ── để trống
+GPIO 18 ── MAX98357A SD             MAX98357A + / − ── loa
 ```
+
+- Chân SD (SD_MODE): firmware kéo thấp = ampli tắt (<1 µA) khi rảnh, lúc ngủ nhẹ và ngủ sâu; kéo
+  cao = bật. Chưa nối thì đặt `AMP_SD_PIN -1` (module tự bật nhờ điện trở kéo lên có sẵn, tốn ~2,4 mA lúc chờ).
+- Chân GAIN: để trống = 9 dB. Nối GND = 12 dB, GND qua 100kΩ = 15 dB, VIN = 6 dB, VIN qua 100kΩ = 3 dB.
+  Âm lượng tối đa chỉnh bằng `VOLUME_MAX_GAIN` trong `esp/include/config.h`.
+- Ra loa là kiểu cầu (BTL): **không nối chân loa nào xuống GND**.
+- Ampli ăn thẳng từ pin để dòng lúc kêu to không làm sụt 3V3 (méo, board tự khởi động lại).
 
 ## 2. Phím
 
@@ -52,7 +55,7 @@ HXJ8002 ngõ ra ── loa
 2. Nhấn phím chỉ phát đúng âm của phím, không kèm âm báo nào.
 3. Pin < ~3,3 V → không phát, ngủ sâu (không kêu).
 4. Đang dùng: chip ngủ nhẹ, nhấn phím phát ngay.
-5. Không dùng 5 phút và WiFi tắt → ngủ sâu (không kêu). Không cắt nguồn ampli (ampli vẫn ăn ~4–6 mA).
+5. Không dùng 5 phút và WiFi tắt → ngủ sâu (không kêu). Ampli tắt bằng chân SD (<1 µA).
 6. Xung nhịp thấp (80 MHz), giảm công suất WiFi, giới hạn âm lượng tối đa, tắt mạch nguồn màn hình (GPIO15).
 
 Thức dậy từ ngủ sâu:
@@ -79,15 +82,15 @@ Thức dậy từ ngủ sâu:
 
 | Sự kiện | Âm báo |
 |---|---|
-| Bật WiFi | Bíp đi lên |
-| Tắt WiFi | Bíp trầm đi xuống |
+| Bật WiFi | Chuông báo sân bay, giây 1–5 (`esp/assets/wifi_chime.mp3` → `wifi_on.adp`, nhúng vào firmware) |
+| Tắt WiFi | Chuông báo sân bay, giây 9–13 (→ `wifi_off.adp`) |
 | Đổi âm lượng | Bíp ở mức mới |
 
 Nhấn 1 phím không có âm báo, chỉ phát âm của phím.
 
 ## 6. Lưu âm thanh
 
-- Lưu trong flash 16 MB, phân vùng FFat ~12,8 MB. Âm thanh nén IMA ADPCM 4-bit, 22050 Hz mono (~11 KB/giây) → ~20 phút tổng cộng.
+- Lưu trong flash 16 MB, phân vùng FFat ~12,8 MB. Âm thanh nén IMA ADPCM 4-bit, 22321 Hz mono (~11 KB/giây) → ~20 phút tổng cộng.
 - Mất điện vẫn nhớ âm thanh và âm lượng.
 
 ## 7. Web local

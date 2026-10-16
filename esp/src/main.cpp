@@ -47,6 +47,9 @@ void onWifiToggle() {
     audioTone(TONE_WIFI_ON);
     delay(20);  // chờ player nhận lệnh
     while (audioBusy()) delay(5);
+    // Tắt hẳn ampli + I2S trong lúc WiFi khởi động: cộng dồn hai dòng là sụt áp, board reset (lý do 9).
+    // Âm phát sau đó tự bật lại
+    audioShutdown();
     delay(300);
     log_i("Bat WiFi");
     wifiOn();
@@ -76,7 +79,8 @@ void setup() {
 
   keysBegin(wakeKeyMask());
   markActivity();
-  log_i("San sang. Pin %d mV (%d%%), am luong %d%%", batteryMv(), batteryPercent(), audioVolume());
+  log_i("San sang. Pin %d mV (%d%%), am luong %d%%, ly do reset %d", batteryMv(), batteryPercent(),
+        audioVolume(), esp_reset_reason());
 }
 
 void loop() {
@@ -107,7 +111,7 @@ void loop() {
   uint32_t idleFor = millis() - lastActivity;
   if (quiet && idleFor >= DEEP_SLEEP_IDLE_MS) deepSleep();
 
-  // Rảnh: hạ mức âm thanh êm, tắt I2S rồi ngủ nhẹ tới khi nhấn phím (hoặc tới giờ ngủ sâu).
+  // Rảnh: tắt ampli và I2S rồi ngủ nhẹ tới khi nhấn phím (hoặc tới giờ ngủ sâu).
   // Chờ AUDIO_OFF_IDLE_MS để nhấn liên tiếp không phải bật/tắt ngõ ra mỗi lần
   if (quiet && idleFor >= AUDIO_OFF_IDLE_MS) {
     audioOff();

@@ -6,7 +6,7 @@
 // API (giống web/dev_server.py):
 //   GET  /info   GET /state
 //   POST /play?btn=N   /volume?v=0..100[&save=1]   /delete?btn=N
-//   POST /upload?btn=N&size=BYTES&name=...  (multipart, IMA ADPCM 4-bit 22050 Hz mono)
+//   POST /upload?btn=N&size=BYTES&name=...  (multipart, IMA ADPCM 4-bit 22321 Hz mono)
 
 #include "web.h"
 #include <DNSServer.h>
@@ -189,11 +189,12 @@ void wifiOn() {
   WiFi.mode(WIFI_AP);
   // Điện thoại ở gần: giảm công suất ngay từ đầu cho đỡ tốn pin và đỡ nhiễu vào ampli
   // (ampli nằm sát anten, lúc phát sóng mạnh loa kêu rột rột).
-  // Gọi thẳng IDF vì WiFi.setTxPower() bỏ qua khi AP chưa báo đã chạy; đơn vị 0,25 dBm
-  esp_wifi_set_max_tx_power(34);
+  // Gọi thẳng IDF vì WiFi.setTxPower() bỏ qua khi AP chưa báo đã chạy; đơn vị 0,25 dBm.
+  // 8 = 2 dBm, mức thấp nhất: 8,5 dBm vẫn làm loa rè khi WiFi bật
+  esp_wifi_set_max_tx_power(8);
   WiFi.softAPConfig(AP_IP, AP_IP, IPAddress(255, 255, 255, 0));
   WiFi.softAP(AP_SSID, strlen(AP_PASS) ? AP_PASS : nullptr);
-  esp_wifi_set_max_tx_power(34);
+  esp_wifi_set_max_tx_power(8);
   dns.setErrorReplyCode(DNSReplyCode::NoError);
   dns.start(53, "*", AP_IP);
   server.begin();

@@ -6,26 +6,33 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 #define KEY_COUNT 4
 #define WIFI_KEY_PIN   14   // nút KEY có sẵn trên board: nhấn để bật/tắt WiFi
 
-#define AUDIO_PIN      16   // tín hiệu âm thanh -> 1kΩ -> HXJ8002 R (tụ 15nF xuống GND)
-#define AUDIO_CLK_PIN  12   // xung PDM nội bộ, KHÔNG nối gì
+// Ampli số MAX98357A (I2S). VIN -> (+) pin sau công tắc, GND -> (−) pin. Xem PLAN.md
+#define AUDIO_DIN_PIN  11   // -> DIN
+#define AUDIO_BCLK_PIN 12   // -> BCLK
+#define AUDIO_LRC_PIN  13   // -> LRC (WS)
+#define AMP_SD_PIN     18   // -> SD (SD_MODE). Thấp = ampli tắt. Không nối (ampli luôn bật) thì đặt -1
 #define BAT_ADC_PIN    4    // đo pin, có sẵn trên board (chia áp 1/2)
 #define LCD_POWER_PIN  15   // nguồn màn hình (đã tháo) -> giữ LOW cho đỡ hao
 #define LCD_BL_PIN     38   // đèn nền màn hình -> giữ LOW
 
 // ---------------- Âm thanh ----------------
-#define SAMPLE_RATE      22050  // phải trùng RATE trong web/index.html
+// Phải trùng RATE trong web/index.html. 22321 = 160 MHz / 7168: MCLK = 256 x tần số mẫu
+// = 160 MHz / 28 chia chẵn (xung I2S đều). Đổi số này thì các âm đã lưu phát sai cao độ
+#define SAMPLE_RATE      22321
 #define VOLUME_DEFAULT   70     // %
 #define VOLUME_STEP      5      // % mỗi nấc khi chỉnh bằng phím
 #define TONE_LEVEL       0.004f  // tiếng xác nhận chỉnh âm lượng, nhẹ hơn âm phím
 #define WIFI_TONE_LEVEL  0.00005f // âm báo WiFi cực nhẹ, tách biệt với âm lượng âm phím
 #define WIFI_SOUND_GAIN  0.3f    // tiếng ding WiFi so với âm phím (0,3 ≈ nhỏ hơn 10 dB). Quá nhỏ (vd 0,004) thì chỉ còn tiếng xì
-#define VOLUME_MAX_GAIN  0.11f  // mức to nhất. PDM chế độ DAC to gấp đôi codec cũ (cũ 0,22, rè từ ~0,3). Giảm nếu loa rè hoặc board tự khởi động lại khi kêu to
+#define VOLUME_MAX_GAIN  1.0f   // mức to nhất (1 = hết thang số). Ampli tăng 9 dB (chân GAIN để trống) nên
+                                // trên ~0,7 đỉnh âm chạm điện áp pin -> hơi méo; đang để hết cỡ cho to nhất.
+                                // Loa 0,8 W (tối đa 1 W): rè hoặc nóng -> giảm về 0,7
 
-// Bật/tắt ngõ ra âm thanh: mức nghỉ được nâng/hạ từ từ để loa không kêu "bụp"
-#define AUDIO_BOOT_RAMP_MS  400   // lúc khởi động (bản không ngủ: bật một lần rồi giữ luôn)
-#define AUDIO_RAMP_UP_MS    45    // lúc thức dậy, lọt trong COMBO_WINDOW_MS nên không làm phím chậm
-#define AUDIO_RAMP_DOWN_MS  300   // trước khi ngủ
-#define AUDIO_OFF_IDLE_MS   3000  // (bản có ngủ) im bao lâu thì hạ mức, tắt I2S để ngủ nhẹ
+#define AUDIO_OFF_IDLE_MS   3000  // (bản có ngủ) im bao lâu thì tắt I2S để ngủ nhẹ
+
+// Tắt ampli bằng chân SD_MODE khi rảnh: loa im tuyệt đối (hết xì nền), đỡ hao pin
+#define AMP_WAKE_MS      10    // MAX98357A cần chừng này để bật. Mất đầu âm -> tăng (giữ dưới COMBO_WINDOW_MS)
+#define AMP_IDLE_OFF_MS  3000  // im bao lâu thì tắt ampli (bản không ngủ; bản có ngủ tắt theo AUDIO_OFF_IDLE_MS)
 
 // ---------------- Phím ----------------
 #define DEBOUNCE_MS             15

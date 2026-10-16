@@ -1,31 +1,25 @@
-// Phát âm thanh bằng I2S PDM ra 1 chân -> lọc RC -> ampli analog HXJ8002.
-// PDM chạy bằng DMA nên không tốn CPU và không bị giật khi WiFi bận.
+// Phát âm thanh qua I2S chuẩn (Philips, 16-bit mono) tới ampli số MAX98357A.
+// I2S chạy bằng DMA nên không tốn CPU và không bị giật khi WiFi bận.
 //
 // File âm thanh nén IMA ADPCM 4-bit (web nén trước khi gửi): 1 byte = 2 mẫu, nibble thấp
 // trước, trạng thái bắt đầu từ 0. Nhẹ hơn PCM 16-bit 4 lần.
 //
-// Chống "bụp" và "xì":
-// - Tắt bộ lọc high-pass có sẵn trong khối PDM. Nó kéo mọi mức một chiều về giữa (~1,65V)
-//   trong vài ms nên đoạn kéo mức khi bật/tắt bị vọt quá, và lúc tắt chân nhảy thẳng từ
-//   1,65V xuống 0V -> "bụp". Thay bằng bộ lọc DC phần mềm chỉ áp lên âm thanh.
-// - Mức nghỉ (im lặng) đặt thấp, vừa đủ chỗ cho biên độ lớn nhất, thay vì ở giữa. Nhiễu
-//   nguồn 3V3 lọt ra chân tỉ lệ với mức nghỉ nên nhỏ đi ~5 lần (bớt xì), và bước nâng/hạ
-//   mức khi bật/tắt cũng nhỏ đi chừng ấy (bớt bụp).
-// - Chân âm thanh chỉ được nối vào I2S sau khi PDM đã chạy ổn ở mức sàn, và tách ra trước
-//   khi dừng, nên lúc bật/tắt I2S không lọt xung lạ ra loa.
-// - Bản không ngủ: bật một lần lúc khởi động rồi giữ luôn, không bật/tắt theo từng lần phát.
+// MAX98357A nhận số nên im lặng là mẫu 0, không có mức nghỉ, lọc RC hay nhiễu nguồn 3V3 như
+// ngõ ra PDM cũ. Chip tự chống "bụp" khi bật/tắt và tự tắt tiếng khi mất xung BCLK.
+// - Bản không ngủ: bật I2S một lần lúc khởi động rồi giữ luôn.
 //   Bản có ngủ: chỉ tắt khi sắp ngủ nhẹ, bật lại ngay lúc chạm phím (trong lúc chờ tổ hợp).
 // - Âm phím vào/ra êm vài ms, nhấn phím khác lúc đang phát thì âm cũ được hạ êm rồi mới
 //   chuyển, đổi âm lượng lúc đang phát thì mức trượt dần -> không kêu "tách".
+// - Chân SD_MODE của ampli (AMP_SD_PIN): ampli chỉ bật khi có âm cần phát, rảnh AMP_IDLE_OFF_MS
+//   thì tắt -> lúc im loa không xì, đỡ hao pin (~2,4 mA lúc chờ, tắt còn <1 µA).
 
 #include "audio.h"
 #include "config.h"
 #include "wifi_sound.h"
 #include <FFat.h>
 #include "driver/gpio.h"
-#include "driver/i2s_pdm.h"
+#include "driver/i2s_std.h"
 #include "esp_rom_gpio.h"
-#include "soc/gpio_sig_map.h"
 
 namespace {
 
@@ -77,7 +71,8 @@ struct Adpcm {
   }
 };
 
-// Bỏ thành phần một chiều của file (cắt tần dưới ~14 Hz), thay cho bộ lọc của khối PDM
+// Bỏ thành phần một chiều của file (cắt tần dưới ~14 Hz): DC chỉ làm nóng loa và gây "tách"
+// ở đầu/cuối đoạn
 struct DcBlock {
   int32_t x1 = 0, y1 = 0;
   int32_t next(int32_t x) {
@@ -87,21 +82,23 @@ struct DcBlock {
   }
 };
 
-// Mức mẫu đưa ra PDM: -32768 = chân gần 0V, 32767 = gần 3,3V.
-// SILENCE: mức nghỉ, chừa 1,6 lần biên độ lớn nhất (lọc DC có thể vọt) + khoảng an toàn
-const int32_t FLOOR = -32768;
-const int32_t SILENCE = FLOOR + (int32_t)(VOLUME_MAX_GAIN * 32767 * 1.6f) + 1500;
+// MCLK = 256 * SAMPLE_RATE (BCLK = MCLK / 8). Phần lẻ của 160 MHz / MCLK phải nhỏ hơn 1/126
+// để driver chọn bộ chia nguyên (xung đều, không rung pha)
+const uint32_t I2S_MCLK = SAMPLE_RATE * 256;
+static_assert(160000000UL % I2S_MCLK * 126 < I2S_MCLK, "SAMPLE_RATE khong cho bo chia xung nguyen");
 
 const size_t CHUNK = 256;                       // mẫu mỗi lần ghi
 const uint32_t FADE_IN = SAMPLE_RATE * 3 / 1000;
 const uint32_t FADE_OUT = SAMPLE_RATE * 6 / 1000;
-const char *const WIFI_SOUND_PATH = "/wifi.adp";
+const char *const WIFI_ON_PATH = "/wifi_on.adp";
+const char *const WIFI_OFF_PATH = "/wifi_off.adp";
 
 QueueHandle_t queue;
 i2s_chan_handle_t tx;
-int16_t floorBuf[CHUNK];
-int16_t silenceBuf[CHUNK];
-int16_t lastSignal = 0;  // mẫu vừa phát (chưa cộng mức nghỉ), để hạ êm khi bị cắt ngang
+int16_t silenceBuf[CHUNK];  // toàn 0
+int16_t lastSignal = 0;     // mẫu vừa phát, để hạ êm khi bị cắt ngang
+bool ampOn = AMP_SD_PIN < 0;  // không nối chân SD thì ampli luôn chạy
+uint32_t quietSamples = 0;    // số mẫu im lặng liên tiếp, để tắt ampli khi rảnh
 
 volatile int8_t playingKey = -1;
 volatile bool busy = false;
@@ -118,22 +115,29 @@ uint32_t fileCrc32(File &file) {
   return ~crc;
 }
 
-void installWifiSound() {
-  File current = FFat.open(WIFI_SOUND_PATH, "r");
+// Chép âm nhúng trong firmware ra FFat (chỉ khi khác bản đang có) để player đọc như âm phím
+void installSound(const char *path, const uint8_t *data, size_t len, uint32_t crc) {
+  File current = FFat.open(path, "r");
   if (current) {
-    bool matches = current.size() == WIFI_SOUND_ADP_LEN && fileCrc32(current) == WIFI_SOUND_ADP_CRC32;
+    bool matches = current.size() == len && fileCrc32(current) == crc;
     current.close();
     if (matches) return;
   }
 
-  File out = FFat.open(WIFI_SOUND_PATH, "w");
+  File out = FFat.open(path, "w");
   if (!out) {
-    log_e("Khong tao duoc am thanh WiFi");
+    log_e("Khong tao duoc %s", path);
     return;
   }
-  size_t written = out.write(WIFI_SOUND_ADP, WIFI_SOUND_ADP_LEN);
+  size_t written = out.write(data, len);
   out.close();
-  if (written != WIFI_SOUND_ADP_LEN) log_e("Ghi am thanh WiFi loi: %u/%u", written, WIFI_SOUND_ADP_LEN);
+  if (written != len) log_e("Ghi %s loi: %u/%u", path, written, len);
+}
+
+void installWifiSounds() {
+  if (FFat.exists("/wifi.adp")) FFat.remove("/wifi.adp");  // bản cũ dùng chung 1 âm cho bật/tắt
+  installSound(WIFI_ON_PATH, WIFI_ON_ADP, WIFI_ON_ADP_LEN, WIFI_ON_ADP_CRC32);
+  installSound(WIFI_OFF_PATH, WIFI_OFF_ADP, WIFI_OFF_ADP_LEN, WIFI_OFF_ADP_CRC32);
 }
 
 // Âm lượng theo cong bình phương (giống cảm nhận của tai), dạng Q16
@@ -147,26 +151,10 @@ void writeLevels(const int16_t *s, size_t n) {
   i2s_channel_write(tx, s, n * sizeof(int16_t), &written, portMAX_DELAY);
 }
 
-// Ghi âm thanh: cộng mức nghỉ rồi đưa ra PDM
 void writeSignal(int16_t *s, size_t n) {
   if (!n) return;
   lastSignal = s[n - 1];
-  for (size_t j = 0; j < n; j++) s[j] = constrain(SILENCE + s[j], -32768, 32767);
   writeLevels(s, n);
-}
-
-// Kéo mức từ from tới to theo nửa chu kỳ cos (không gãy góc ở hai đầu)
-void ramp(int32_t from, int32_t to, uint32_t ms) {
-  static int16_t buf[CHUNK];
-  const size_t total = max<size_t>(1, SAMPLE_RATE * ms / 1000);
-  for (size_t i = 0; i < total; i += CHUNK) {
-    size_t n = min(CHUNK, total - i);
-    for (size_t j = 0; j < n; j++) {
-      float s = 0.5f - 0.5f * cosf(PI * (i + j + 1) / total);  // 0 -> 1
-      buf[j] = from + (to - from) * s;
-    }
-    writeLevels(buf, n);
-  }
 }
 
 // Âm đang phát bị cắt ngang: hạ êm về im lặng thay vì nhảy bậc
@@ -179,32 +167,40 @@ void fadeOutLast() {
   lastSignal = 0;
 }
 
-// Chân về GPIO thường, mức 0. Đặt mức trước rồi mới chuyển nên không có lúc thả nổi
-void pinLow(uint8_t pin) {
-  gpio_set_level((gpio_num_t)pin, 0);
-  esp_rom_gpio_connect_out_signal(pin, SIG_GPIO_OUT_IDX, false, false);
-  gpio_set_direction((gpio_num_t)pin, GPIO_MODE_OUTPUT);
+// đẩy hết âm cuối còn trong bộ đệm DMA (~33ms) ra loa
+void flush() {
+  for (int i = 0; i < 4; i++) writeLevels(silenceBuf, CHUNK);
 }
 
-void powerUp(uint32_t ms) {
-  size_t loaded;
-  do {  // nạp sẵn mức sàn vào bộ đệm DMA
-    i2s_channel_preload_data(tx, floorBuf, sizeof(floorBuf), &loaded);
-  } while (loaded == sizeof(floorBuf));
+// Bật/tắt ampli bằng chân SD_MODE (thấp = tắt). Lúc tắt chân được giữ (hold) ở mức thấp để
+// ampli vẫn tắt trong lúc chip ngủ nhẹ / ngủ sâu
+void ampEnable(bool on) {
+#if AMP_SD_PIN >= 0
+  if (on == ampOn) return;
+  if (on) {
+    gpio_hold_dis((gpio_num_t)AMP_SD_PIN);
+    gpio_set_level((gpio_num_t)AMP_SD_PIN, 1);
+    // ampli cần vài ms để khởi động; phát sớm hơn thì mất đầu âm
+    for (uint32_t i = 0; i < SAMPLE_RATE * AMP_WAKE_MS / 1000; i += CHUNK) writeLevels(silenceBuf, CHUNK);
+  } else {
+    flush();
+    gpio_set_level((gpio_num_t)AMP_SD_PIN, 0);
+    gpio_hold_en((gpio_num_t)AMP_SD_PIN);
+  }
+  ampOn = on;
+#endif
+}
+
+void powerUp() {
   i2s_channel_enable(tx);
-  // chạy mức sàn ~20ms cho bộ lọc nội bộ của PDM ổn định, rồi mới nối chân vào I2S
-  for (int i = 0; i < 2; i++) writeLevels(floorBuf, CHUNK);
-  esp_rom_gpio_connect_out_signal(AUDIO_PIN, I2S0O_SD_OUT_IDX, false, false);
-  ramp(FLOOR, SILENCE, ms);
   lastSignal = 0;
   idle = false;
 }
 
-void powerDown(uint32_t ms) {
+void powerDown() {
   fadeOutLast();
-  ramp(SILENCE, FLOOR, ms);
-  for (int i = 0; i < 8; i++) writeLevels(floorBuf, CHUNK);  // đẩy hết dữ liệu cũ trong DMA
-  pinLow(AUDIO_PIN);  // tách chân khỏi I2S trước khi dừng
+  ampEnable(false);
+  flush();
   i2s_channel_disable(tx);
   idle = true;
 }
@@ -246,7 +242,7 @@ void playerTask(void *) {
   };
 
 #if !ENABLE_SLEEP
-  powerUp(AUDIO_BOOT_RAMP_MS);  // bản không ngủ: bật một lần, giữ luôn
+  powerUp();  // bản không ngủ: bật một lần, giữ luôn
 #endif
 
   for (;;) {
@@ -256,7 +252,9 @@ void playerTask(void *) {
     // đang bật thì không được ngừng ghi: hết dữ liệu DMA sẽ phát lại khối cũ
     if (xQueueReceive(queue, &cmd, active || !idle ? 0 : portMAX_DELAY) == pdTRUE) {
       if (cmd.key == CMD_WAKE) {  // không cắt âm đang phát
-        if (idle) powerUp(AUDIO_RAMP_UP_MS);
+        if (idle) powerUp();
+        quietSamples = 0;
+        ampEnable(true);  // bật sẵn trong lúc chờ tổ hợp phím
         continue;
       }
 
@@ -267,14 +265,18 @@ void playerTask(void *) {
       if (!idle) fadeOutLast();
 
       if (cmd.key == CMD_STOP) { busy = false; continue; }
-      if (cmd.key == CMD_OFF) { busy = false; if (!idle) powerDown(AUDIO_RAMP_DOWN_MS); continue; }
+      if (cmd.key == CMD_OFF) { busy = false; if (!idle) powerDown(); continue; }
 
       if (cmd.key >= 0) {  // chỉ phát âm của phím, không kèm âm báo
         if (!openSound(soundPath(cmd.key))) { busy = false; continue; }
         playingKey = cmd.key;
-      } else if (cmd.tone == TONE_WIFI_ON) {
+      } else if (cmd.tone == TONE_WIFI_ON || cmd.tone == TONE_WIFI_OFF) {  // nhạc báo bật / tắt WiFi
         wifiSound = true;
-        if (!openSound(WIFI_SOUND_PATH)) { wifiSound = false; busy = false; continue; }
+        if (!openSound(cmd.tone == TONE_WIFI_ON ? WIFI_ON_PATH : WIFI_OFF_PATH)) {
+          wifiSound = false;
+          busy = false;
+          continue;
+        }
       } else if (cmd.tone != TONE_NONE) {
         note = TONES[cmd.tone];
         startNote();
@@ -292,12 +294,16 @@ void playerTask(void *) {
         continue;
       }
       busy = true;
-      if (idle) powerUp(AUDIO_RAMP_UP_MS);
+      if (idle) powerUp();
+      quietSamples = 0;
+      ampEnable(true);
       continue;
     }
 
-    if (!active) {  // đang bật mà rảnh: giữ mức nghỉ
+    if (!active) {  // đang bật mà rảnh: giữ mức nghỉ, im lâu thì tắt ampli
       writeLevels(silenceBuf, CHUNK);
+      quietSamples += CHUNK;
+      if (ampOn && quietSamples >= SAMPLE_RATE * AMP_IDLE_OFF_MS / 1000) ampEnable(false);
       continue;
     }
 
@@ -353,7 +359,9 @@ void playerTask(void *) {
         uint32_t left = fileTotal > filePos ? fileTotal - filePos : 0;
         if (left < FADE_OUT) env = min<int32_t>(env, left * 65536 / FADE_OUT);
         int32_t g = gain + (target - gain) * (int32_t)j / (int32_t)n;
-        buf[j] = constrain((s * ((g * env) >> 16)) >> 16, -32768, 32767);
+        // 64-bit: g * env tràn int32 khi gain >= 0,5 (âm lượng cao) -> âm phím ra rác hoặc im
+        int32_t v = (int32_t)(((int64_t)s * g * env) >> 32);
+        buf[j] = constrain(v, -32768, 32767);
       }
       gain = target;
     }
@@ -371,40 +379,35 @@ void send(int8_t key, Tone t) {
 String soundPath(uint8_t key) { return "/s" + String(key + 1) + ".adp"; }
 
 void audioBegin() {
-  installWifiSound();
-  for (size_t i = 0; i < CHUNK; i++) {
-    floorBuf[i] = FLOOR;
-    silenceBuf[i] = SILENCE;
-  }
-  gpio_hold_dis((gpio_num_t)AUDIO_PIN);  // vừa thức dậy từ ngủ sâu
+  installWifiSounds();
+#if AMP_SD_PIN >= 0
+  esp_rom_gpio_pad_select_gpio(AMP_SD_PIN);
+  gpio_set_level((gpio_num_t)AMP_SD_PIN, 0);  // ampli tắt tới khi có âm cần phát
+  gpio_set_direction((gpio_num_t)AMP_SD_PIN, GPIO_MODE_OUTPUT);
+  gpio_hold_dis((gpio_num_t)AMP_SD_PIN);  // vừa thức dậy từ ngủ sâu
+  gpio_hold_en((gpio_num_t)AMP_SD_PIN);
+#endif
 
   i2s_chan_config_t chanCfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
-  // Không tự xoá khi hết dữ liệu: xoá = mẫu 0 = mức giữa ~1,65V -> "bụp". Luôn ghi đủ dữ liệu
-  chanCfg.auto_clear = false;
-  // Bộ đệm DMA ~33ms (mặc định ~65ms): đang giữ mức nghỉ thì âm phím vào hàng sau chừng ấy
+  // Hết dữ liệu thì DMA phát mẫu 0 (im lặng) thay vì lặp lại khối cũ
+  chanCfg.auto_clear = true;
+  // Bộ đệm DMA ~33ms (mặc định ~65ms): đang phát im lặng thì âm phím vào hàng sau chừng ấy
   chanCfg.dma_desc_num = 6;
   chanCfg.dma_frame_num = 120;
   ESP_ERROR_CHECK(i2s_new_channel(&chanCfg, &tx, nullptr));
 
-  i2s_pdm_tx_gpio_config_t gpioCfg = {};
-  gpioCfg.clk = (gpio_num_t)AUDIO_CLK_PIN;
-  gpioCfg.dout = (gpio_num_t)AUDIO_PIN;
-#if SOC_I2S_PDM_MAX_TX_LINES > 1
-  gpioCfg.dout2 = I2S_GPIO_UNUSED;
-#endif
-  gpioCfg.invert_flags.clk_inv = false;
-
-  // Chế độ DAC: 1 dòng PDM thẳng ra lọc RC. Chế độ codec mặc định ghép 2 kênh xen kẽ trên
-  // một dây (dành cho chip nhận PDM), qua lọc RC thành nhiễu xì xèo, rè
-  i2s_pdm_tx_config_t cfg = {};
-  cfg.clk_cfg = I2S_PDM_TX_CLK_DAC_DEFAULT_CONFIG(SAMPLE_RATE);
-  cfg.slot_cfg = I2S_PDM_TX_SLOT_DAC_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
-  cfg.slot_cfg.hp_en = false;  // giữ được mức nghỉ thấp và đoạn kéo mức (xem đầu file)
-  cfg.gpio_cfg = gpioCfg;
-  ESP_ERROR_CHECK(i2s_channel_init_pdm_tx_mode(tx, &cfg));
-  // Chế độ DAC không cần xung PDM ở ngoài: tắt chân xung cho đỡ nhiễu 6 MHz lan sang dây âm thanh
-  pinLow(AUDIO_CLK_PIN);
-  pinLow(AUDIO_PIN);
+  i2s_std_config_t cfg = {};
+  cfg.clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE);
+  cfg.clk_cfg.clk_src = I2S_CLK_SRC_PLL_160M;  // xem I2S_MCLK
+  // Mono: ESP32-S3 phát cùng một mẫu ở cả kênh trái lẫn phải (slot_mask = BOTH), nên chân
+  // SD_MODE chọn kênh nào (trái / phải / trộn) ampli cũng nhận đúng âm
+  cfg.slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
+  cfg.gpio_cfg.mclk = I2S_GPIO_UNUSED;  // MAX98357A không cần MCLK
+  cfg.gpio_cfg.bclk = (gpio_num_t)AUDIO_BCLK_PIN;
+  cfg.gpio_cfg.ws = (gpio_num_t)AUDIO_LRC_PIN;
+  cfg.gpio_cfg.dout = (gpio_num_t)AUDIO_DIN_PIN;
+  cfg.gpio_cfg.din = I2S_GPIO_UNUSED;
+  ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx, &cfg));
 
   queue = xQueueCreate(1, sizeof(Cmd));
   xTaskCreatePinnedToCore(playerTask, "player", 4096, nullptr, 5, nullptr, 1);
@@ -430,7 +433,7 @@ void audioOff() {
 void audioShutdown() {
   send(CMD_OFF, TONE_NONE);
   for (int i = 0; i < 200 && (!idle || uxQueueMessagesWaiting(queue)); i++) delay(5);
-  gpio_hold_en((gpio_num_t)AUDIO_PIN);  // giữ 0V trong lúc ngủ sâu
+  // ampli đã tắt, chân SD_MODE đang được giữ thấp suốt lúc ngủ sâu (xem ampEnable)
 }
 
 int audioPlayingKey() { return playingKey; }

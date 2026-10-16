@@ -154,7 +154,7 @@
 </dialog>
 
 <script>
-const RATE = 22050, N = 4;
+const RATE = 22321, N = 4;  // phải trùng SAMPLE_RATE trong esp/include/config.h
 const MAX_FILE = 300e6;  // video lớn hơn thì điện thoại dễ hết RAM khi tách tiếng
 const $ = s => document.querySelector(s);
 const secs = bytes => bytes * 2 / RATE;  // ADPCM 4-bit: 1 byte = 2 mẫu
@@ -278,7 +278,7 @@ $('#vol').oninput = e => {
 };
 $('#vol').onchange = e => post('/volume?save=1&v=' + e.target.value).catch(() => {});
 
-// ---- Đọc file âm thanh hoặc video -> mẫu mono 22050 Hz ----
+// ---- Đọc file âm thanh hoặc video -> mẫu mono RATE Hz ----
 async function decodeFile(file) {
   const isVideo = file.type.startsWith('video');
   if (file.size > MAX_FILE)
@@ -287,7 +287,7 @@ async function decodeFile(file) {
   const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   let audio;
   try {
-    // giải mã thẳng ở 22050 Hz cho đỡ tốn RAM với video dài
+    // giải mã thẳng ở RATE cho đỡ tốn RAM với video dài
     audio = await new Promise((ok, fail) => {
       const p = new Ctx(1, 1, RATE).decodeAudioData(data, ok, fail);
       if (p && p.catch) p.catch(fail);
@@ -305,18 +305,71 @@ async function decodeFile(file) {
   return out;
 }
 
-// Cắt lặng hai đầu, chuẩn hoá. Trả null nếu đoạn gần như không có tiếng
+// ---- Xử lý cho loa 20 mm (SPK-204, cộng hưởng ~800 Hz), chủ yếu là giọng nói ----
+// Loa gần như không kêu dưới ~800 Hz: phần trầm chỉ làm màng loa rung quá mức (rè) và chiếm hết
+// mức to -> bỏ phần dưới HPF_HZ. Nhấn dải PRESENCE_HZ cho rõ chữ. Nén động (trên COMP_THRESHOLD,
+// tỉ lệ COMP_RATIO) để chỗ nói nhỏ to gần bằng chỗ nói to: sau chuẩn hoá cả đoạn to hơn ~5 dB.
+// Nén mạnh hơn (0,2 / 6:1) thì to hơn nhưng tiếng bị rè
+const HPF_HZ = 700;
+const PRESENCE_HZ = 2500, PRESENCE_DB = 4;
+const COMP_THRESHOLD = 0.35, COMP_RATIO = 2.5;
+
+function biquad(d, b0, b1, b2, a0, a1, a2) {
+  const out = new Float32Array(d.length);
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < d.length; i++) {
+    const x = d[i], y = (b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0;
+    x2 = x1; x1 = x; y2 = y1; y1 = y;
+    out[i] = y;
+  }
+  return out;
+}
+
+// Butterworth bậc 2
+function highPass(d) {
+  const w = 2 * Math.PI * HPF_HZ / RATE, cw = Math.cos(w), al = Math.sin(w) / Math.SQRT2;
+  return biquad(d, (1 + cw) / 2, -(1 + cw), (1 + cw) / 2, 1 + al, -2 * cw, 1 - al);
+}
+
+// Nhấn đỉnh (peaking EQ), Q = 1
+function presence(d) {
+  const w = 2 * Math.PI * PRESENCE_HZ / RATE, cw = Math.cos(w), al = Math.sin(w) / 2;
+  const A = Math.pow(10, PRESENCE_DB / 40);
+  return biquad(d, 1 + al * A, -2 * cw, 1 - al * A, 1 + al / A, -2 * cw, 1 - al / A);
+}
+
+// Nén động. Đường bao đỉnh: lên trước đỉnh 5 ms (quét ngược), xuống dần trong 100 ms (quét xuôi),
+// nên mức giảm thay đổi êm, không kêu "tách"
+function compress(d) {
+  const n = d.length, rel = Math.exp(-1 / (RATE * 0.1)), att = Math.exp(-1 / (RATE * 0.005));
+  const env = new Float32Array(n);
+  let peak = 0;
+  for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(d[i]));
+  if (!peak) return d;
+  for (let i = 0, e = 0; i < n; i++) env[i] = e = Math.max(Math.abs(d[i]) / peak, e * rel);
+  for (let i = n - 1, e = 0; i >= 0; i--) env[i] = e = Math.max(env[i], e * att);
+  const out = new Float32Array(n), k = 1 - 1 / COMP_RATIO;
+  for (let i = 0; i < n; i++) {
+    const e = env[i];
+    out[i] = d[i] / peak * (e > COMP_THRESHOLD ? Math.pow(COMP_THRESHOLD / e, k) : 1);
+  }
+  return out;
+}
+
+// Cắt lặng hai đầu, lọc trầm, nhấn rõ chữ, nén, chuẩn hoá. Trả null nếu đoạn gần như không có tiếng
 function prepare(d) {
   let a = 0, b = d.length - 1;
   while (a < b && Math.abs(d[a]) < 0.01) a++;
   while (b > a && Math.abs(d[b]) < 0.01) b--;
   if (b - a < RATE * 0.02) return null;
   d = d.subarray(Math.max(0, a - (RATE * 0.01 | 0)), Math.min(d.length, b + (RATE * 0.05 | 0)));
+  d = compress(presence(highPass(d)));
+  // Chuẩn hoá theo đỉnh, không cắt / nén thêm đỉnh nào để tiếng trong
   let peak = 0;
   for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
-  const out = new Float32Array(d.length), g = 0.95 / peak;
-  for (let i = 0; i < d.length; i++) out[i] = d[i] * g;
-  return out;
+  if (!peak) return null;
+  const g = 0.9 / peak;
+  return Float32Array.from(d, v => v * g);
 }
 
 // ---- Nén IMA ADPCM 4-bit, phải khớp từng bước với Adpcm::next() trong esp/src/audio.cpp ----

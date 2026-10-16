@@ -9,7 +9,7 @@ API (firmware sẽ làm y hệt):
   POST /play?btn=N       phát thử phím N (1..4)
   POST /volume?v=0..100[&save=1]
   POST /delete?btn=N
-  POST /upload?btn=N&size=BYTES&name=...   multipart, field "file" = IMA ADPCM 4-bit 22050 Hz mono
+  POST /upload?btn=N&size=BYTES&name=...   multipart, field "file" = IMA ADPCM 4-bit 22321 Hz mono
 """
 import http.server
 import json
@@ -19,7 +19,7 @@ import threading
 import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RATE = 22050
+RATE = 22321  # trùng RATE trong index.html
 TOTAL = 13_400_000  # ~12.8 MB như phân vùng FFat thật (esp/partitions.csv)
 
 state = {"vol": 70, "bat": 82, "playing": -1, "keys": [{"name": "", "size": 0} for _ in range(4)]}
