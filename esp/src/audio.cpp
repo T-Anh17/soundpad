@@ -101,6 +101,13 @@ int16_t lastSignal = 0;     // mẫu vừa phát, để hạ êm khi bị cắt 
 bool ampOn = AMP_SD_PIN < 0;  // không nối chân SD thì ampli luôn chạy
 uint32_t quietSamples = 0;    // số mẫu im lặng liên tiếp, để tắt ampli khi rảnh
 
+// Số lần I2S hụt dữ liệu (DMA hết mẫu mới, phát ra mẫu 0 -> tiếng lẹt xẹt). Chỉ để chẩn đoán
+volatile uint32_t underruns = 0;
+bool IRAM_ATTR onUnderrun(i2s_chan_handle_t, i2s_event_data_t *, void *) {
+  underruns++;
+  return false;
+}
+
 volatile int8_t playingKey = -1;
 volatile bool busy = false;
 volatile bool idle = true;
@@ -211,6 +218,7 @@ void playerTask(void *) {
   static uint8_t raw[CHUNK * 2];   // CHUNK mẫu PCM 16-bit (ADPCM chỉ dùng CHUNK / 2 byte đầu)
   File file;
   bool pcm = false;                // file đang phát: PCM 16-bit hay ADPCM
+  uint32_t underrunsAtStart = 0, readMaxUs = 0;  // chẩn đoán: in ra khi phát xong âm phím
   bool wifiSound = false;
   Adpcm adpcm;
   DcBlock dc;
@@ -276,6 +284,8 @@ void playerTask(void *) {
                                                   : openSound(legacySoundPath(cmd.key), false);
         if (!ok) { busy = false; continue; }
         log_i("Phat phim %d: %s, %u byte", cmd.key + 1, pcm ? "PCM 16-bit" : "ADPCM (ban cu)", file.size());
+        underrunsAtStart = underruns;
+        readMaxUs = 0;
         playingKey = cmd.key;
       } else if (cmd.tone == TONE_WIFI_ON || cmd.tone == TONE_WIFI_OFF) {  // nhạc báo bật / tắt WiFi
         wifiSound = true;
@@ -347,8 +357,13 @@ void playerTask(void *) {
         else { note = nullptr; busy = false; }
       }
     } else {
+      uint32_t t0 = micros();
       size_t got = file.read(raw, pcm ? CHUNK * 2 : CHUNK / 2);
+      readMaxUs = max<uint32_t>(readMaxUs, micros() - t0);
       if (!got) {
+        if (playingKey >= 0)
+          log_i("Phim %d xong: hut du lieu %u lan, doc file lau nhat %u us", playingKey + 1,
+                underruns - underrunsAtStart, readMaxUs);
         file.close();
         wifiSound = false;
         playingKey = -1;
@@ -417,6 +432,9 @@ void audioBegin() {
   cfg.gpio_cfg.dout = (gpio_num_t)AUDIO_DIN_PIN;
   cfg.gpio_cfg.din = I2S_GPIO_UNUSED;
   ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx, &cfg));
+  i2s_event_callbacks_t cbs = {};
+  cbs.on_send_q_ovf = onUnderrun;
+  ESP_ERROR_CHECK(i2s_channel_register_event_callback(tx, &cbs, nullptr));
 
   queue = xQueueCreate(1, sizeof(Cmd));
   xTaskCreatePinnedToCore(playerTask, "player", 4096, nullptr, 5, nullptr, 1);
