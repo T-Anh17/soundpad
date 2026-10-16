@@ -24,9 +24,9 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 #define TONE_LEVEL       0.004f  // tiếng xác nhận chỉnh âm lượng, nhẹ hơn âm phím
 #define WIFI_TONE_LEVEL  0.00005f // âm báo WiFi cực nhẹ, tách biệt với âm lượng âm phím
 #define WIFI_SOUND_GAIN  0.3f    // tiếng ding WiFi so với âm phím (0,3 ≈ nhỏ hơn 10 dB). Quá nhỏ (vd 0,004) thì chỉ còn tiếng xì
-#define VOLUME_MAX_GAIN  1.0f   // mức to nhất (1 = hết thang số). Ampli tăng 9 dB (chân GAIN để trống) nên
-                                // trên ~0,7 đỉnh âm chạm điện áp pin -> hơi méo; đang để hết cỡ cho to nhất.
-                                // Loa 0,8 W (tối đa 1 W): rè hoặc nóng -> giảm về 0,7
+#define VOLUME_MAX_GAIN  0.7f   // mức to nhất (1 = hết thang số). Ampli tăng 9 dB (chân GAIN để trống) nên
+                                // trên ~0,7 đỉnh âm chạm điện áp pin -> méo. Đã thử 1,0: loa 0,8 W rè khi to.
+                                // Vẫn rè -> giảm tiếp (0,6); muốn to hơn thì đổi loa / gắn hộp, đừng tăng số này
 
 #define AUDIO_OFF_IDLE_MS   3000  // (bản có ngủ) im bao lâu thì tắt I2S để ngủ nhẹ
 

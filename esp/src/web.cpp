@@ -6,7 +6,7 @@
 // API (giống web/dev_server.py):
 //   GET  /info   GET /state
 //   POST /play?btn=N   /volume?v=0..100[&save=1]   /delete?btn=N
-//   POST /upload?btn=N&size=BYTES&name=...  (multipart, IMA ADPCM 4-bit 22321 Hz mono)
+//   POST /upload?btn=N&size=BYTES&name=...  (multipart, PCM 16-bit little-endian 22321 Hz mono)
 
 #include "web.h"
 #include <DNSServer.h>
@@ -31,6 +31,7 @@ uint32_t lastUse = 0;
 
 File upFile;
 int upKey = -1;
+bool upOldPage = false;  // upload đến từ trang web bản cũ (định dạng khác)
 
 void touch() {
   lastUse = millis();
@@ -63,7 +64,9 @@ void redirectHome() {
 void handleRoot() {
   touch();
   server.sendHeader("Content-Encoding", "gzip");
-  server.sendHeader("Cache-Control", "no-cache");
+  // no-store: điện thoại không giữ bản trang cũ, nếu không sau khi nạp firmware mới trang cũ vẫn
+  // gửi âm sai định dạng (vd ADPCM khi board đã đọc PCM 16-bit) -> phát ra toàn tiếng xì
+  server.sendHeader("Cache-Control", "no-store");
   server.send_P(200, "text/html; charset=utf-8", (const char *)WEB_PAGE_GZ, WEB_PAGE_GZ_LEN);
 }
 
@@ -77,8 +80,14 @@ void handleInfo() {
   j += ",\"keys\":[";
   for (uint8_t k = 0; k < KEY_COUNT; k++) {
     size_t size = 0;
-    File f = FFat.open(soundPath(k), "r");
-    if (f) { size = f.size(); f.close(); }
+    if (FFat.exists(soundPath(k))) {
+      File f = FFat.open(soundPath(k), "r");
+      if (f) { size = f.size(); f.close(); }
+    } else if (FFat.exists(legacySoundPath(k))) {
+      // âm bản cũ (ADPCM, 1/4 cỡ): báo theo cỡ PCM 16-bit để web tính đúng thời lượng
+      File f = FFat.open(legacySoundPath(k), "r");
+      if (f) { size = f.size() * 4; f.close(); }
+    }
     if (k) j += ',';
     j += "{\"name\":" + jsonStr(prefs.getString(nameKey(k).c_str(), "")) + ",\"size\":" + String((uint32_t)size) + "}";
   }
@@ -117,6 +126,7 @@ void handleDelete() {
   if (k < 0) return server.send(400, "text/plain", "btn?");
   audioStop();
   FFat.remove(soundPath(k));
+  if (FFat.exists(legacySoundPath(k))) FFat.remove(legacySoundPath(k));
   prefs.remove(nameKey(k).c_str());
   server.send(200, "text/plain", "OK");
 }
@@ -128,12 +138,16 @@ void handleUploadData() {
   switch (up.status) {
     case UPLOAD_FILE_START:
       upKey = keyArg();
+      // trang cũ còn trong điện thoại gửi ADPCM (s.adp): lưu vào là phát ra toàn tiếng xì
+      upOldPage = !up.filename.endsWith(".p16");
+      if (upOldPage) upKey = -1;
       if (upKey < 0) return;
       FFat.remove("/tmp.pcm");  // sót lại từ lần mất điện giữa chừng
       // Không đủ chỗ cho cả file tạm lẫn file cũ -> xoá file cũ trước (upload hỏng thì phím đó mất âm)
       if (FFat.freeBytes() < (size_t)server.arg("size").toInt() + 16384) {
         audioStop();
         FFat.remove(soundPath(upKey));
+        if (FFat.exists(legacySoundPath(upKey))) FFat.remove(legacySoundPath(upKey));
         prefs.remove(nameKey(upKey).c_str());
       }
       upFile = FFat.open("/tmp.pcm", "w");
@@ -151,6 +165,7 @@ void handleUploadData() {
       upFile.close();
       audioStop();
       FFat.remove(soundPath(upKey));
+      if (FFat.exists(legacySoundPath(upKey))) FFat.remove(legacySoundPath(upKey));
       FFat.rename("/tmp.pcm", soundPath(upKey));
       prefs.putString(nameKey(upKey).c_str(), server.arg("name").substring(0, 60));
       log_i("Phim %d <- %s (%u byte)", upKey + 1, server.arg("name").c_str(), up.totalSize);
@@ -165,6 +180,7 @@ void handleUploadData() {
 
 void handleUploadDone() {
   if (upKey >= 0) server.send(200, "text/plain", "OK");
+  else if (upOldPage) server.send(409, "text/plain", "Trang cũ, hãy tải lại trang rồi nạp lại");
   else server.send(500, "text/plain", "Lưu thất bại (hết bộ nhớ?)");
   upKey = -1;
 }

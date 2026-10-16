@@ -23,4 +23,5 @@ bool audioIdle();             // đã tắt ampli và I2S -> ngủ được
 void    audioSetVolume(uint8_t v);  // 0..100
 uint8_t audioVolume();
 
-String soundPath(uint8_t key);
+String soundPath(uint8_t key);        // âm phím, PCM 16-bit
+String legacySoundPath(uint8_t key);  // âm phím bản cũ (ADPCM), vẫn phát được tới khi nạp lại

@@ -9,7 +9,7 @@ API (firmware sẽ làm y hệt):
   POST /play?btn=N       phát thử phím N (1..4)
   POST /volume?v=0..100[&save=1]
   POST /delete?btn=N
-  POST /upload?btn=N&size=BYTES&name=...   multipart, field "file" = IMA ADPCM 4-bit 22321 Hz mono
+  POST /upload?btn=N&size=BYTES&name=...   multipart, field "file" = PCM 16-bit little-endian 22321 Hz mono
 """
 import http.server
 import json
@@ -32,7 +32,7 @@ def fake_play(i):
     if stop_timer:
         stop_timer.cancel()
     state["playing"] = i
-    stop_timer = threading.Timer(state["keys"][i]["size"] * 2 / RATE, lambda: state.update(playing=-1))
+    stop_timer = threading.Timer(state["keys"][i]["size"] / 2 / RATE, lambda: state.update(playing=-1))
     stop_timer.start()
 
 
@@ -68,7 +68,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             part = next(p for p in body.split(b"--" + boundary) if b"filename=" in p)
             data = part.split(b"\r\n\r\n", 1)[1][:-2]
             state["keys"][i] = {"name": q.get("name", ""), "size": len(data)}
-            print(f"upload phím {i + 1}: {q.get('name')} ({len(data)} byte = {len(data) * 2 / RATE:.2f} s)")
+            print(f"upload phím {i + 1}: {q.get('name')} ({len(data)} byte = {len(data) / 2 / RATE:.2f} s)")
         elif u.path == "/play":
             fake_play(i)
             print(f"phát phím {i + 1}")

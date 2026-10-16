@@ -157,7 +157,7 @@
 const RATE = 22321, N = 4;  // phải trùng SAMPLE_RATE trong esp/include/config.h
 const MAX_FILE = 300e6;  // video lớn hơn thì điện thoại dễ hết RAM khi tách tiếng
 const $ = s => document.querySelector(s);
-const secs = bytes => bytes * 2 / RATE;  // ADPCM 4-bit: 1 byte = 2 mẫu
+const secs = bytes => bytes / 2 / RATE;  // PCM 16-bit: 2 byte = 1 mẫu
 const num = (x, d = 1) => x.toFixed(d).replace('.', ',');
 const sec = bytes => num(secs(bytes)) + ' giây';
 const dur = bytes => {
@@ -307,11 +307,13 @@ async function decodeFile(file) {
 
 // ---- Xử lý cho loa 20 mm (SPK-204, cộng hưởng ~800 Hz), chủ yếu là giọng nói ----
 // Loa gần như không kêu dưới ~800 Hz: phần trầm chỉ làm màng loa rung quá mức (rè) và chiếm hết
-// mức to -> bỏ phần dưới HPF_HZ. Nhấn dải PRESENCE_HZ cho rõ chữ. Nén động (trên COMP_THRESHOLD,
+// mức to -> bỏ phần dưới HPF_HZ. Nhấn dải PRESENCE_HZ cho rõ chữ (nhấn nhiều thì nghe "mũi"), nâng
+// dải trên SHELF_HZ cho sáng (loa thu được lệch về dải giữa). Nén động (trên COMP_THRESHOLD,
 // tỉ lệ COMP_RATIO) để chỗ nói nhỏ to gần bằng chỗ nói to: sau chuẩn hoá cả đoạn to hơn ~5 dB.
 // Nén mạnh hơn (0,2 / 6:1) thì to hơn nhưng tiếng bị rè
 const HPF_HZ = 700;
-const PRESENCE_HZ = 2500, PRESENCE_DB = 4;
+const PRESENCE_HZ = 2500, PRESENCE_DB = 2;
+const SHELF_HZ = 4000, SHELF_DB = 3;
 const COMP_THRESHOLD = 0.35, COMP_RATIO = 2.5;
 
 function biquad(d, b0, b1, b2, a0, a1, a2) {
@@ -336,6 +338,14 @@ function presence(d) {
   const w = 2 * Math.PI * PRESENCE_HZ / RATE, cw = Math.cos(w), al = Math.sin(w) / 2;
   const A = Math.pow(10, PRESENCE_DB / 40);
   return biquad(d, 1 + al * A, -2 * cw, 1 - al * A, 1 + al / A, -2 * cw, 1 - al / A);
+}
+
+// Nâng dải cao (high shelf), độ dốc S = 1
+function highShelf(d) {
+  const w = 2 * Math.PI * SHELF_HZ / RATE, cw = Math.cos(w), al = Math.sin(w) / Math.SQRT2;
+  const A = Math.pow(10, SHELF_DB / 40), r = 2 * Math.sqrt(A) * al;
+  return biquad(d, A * ((A + 1) + (A - 1) * cw + r), -2 * A * ((A - 1) + (A + 1) * cw), A * ((A + 1) + (A - 1) * cw - r),
+                (A + 1) - (A - 1) * cw + r, 2 * ((A - 1) - (A + 1) * cw), (A + 1) - (A - 1) * cw - r);
 }
 
 // Nén động. Đường bao đỉnh: lên trước đỉnh 5 ms (quét ngược), xuống dần trong 100 ms (quét xuôi),
@@ -363,7 +373,7 @@ function prepare(d) {
   while (b > a && Math.abs(d[b]) < 0.01) b--;
   if (b - a < RATE * 0.02) return null;
   d = d.subarray(Math.max(0, a - (RATE * 0.01 | 0)), Math.min(d.length, b + (RATE * 0.05 | 0)));
-  d = compress(presence(highPass(d)));
+  d = compress(highShelf(presence(highPass(d))));
   // Chuẩn hoá theo đỉnh, không cắt / nén thêm đỉnh nào để tiếng trong
   let peak = 0;
   for (let i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
@@ -372,7 +382,15 @@ function prepare(d) {
   return Float32Array.from(d, v => v * g);
 }
 
-// ---- Nén IMA ADPCM 4-bit, phải khớp từng bước với Adpcm::next() trong esp/src/audio.cpp ----
+// ---- Âm phím: PCM 16-bit little-endian. Không nén: ADPCM 4-bit làm giọng nói "sạn" (SNR ~24 dB) ----
+function encodePcm16(f) {
+  const out = new DataView(new ArrayBuffer(f.length * 2));
+  for (let i = 0; i < f.length; i++) out.setInt16(i * 2, Math.max(-32768, Math.min(32767, Math.round(f[i] * 32767))), true);
+  return new Uint8Array(out.buffer);
+}
+
+// ---- Nén IMA ADPCM 4-bit, phải khớp từng bước với Adpcm::next() trong esp/src/audio.cpp.
+// Chỉ dùng để tạo âm WiFi nhúng trong firmware (esp/assets/wifi_on.adp, wifi_off.adp) ----
 const IMA_STEP = [7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88,
   97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658,
   724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660,
@@ -485,7 +503,7 @@ function updateTrim() {
     th.setAttribute('aria-valuetext', fmt(v / RATE));
     if (document.activeElement !== inp) inp.value = fmt(v / RATE);
   }
-  const bytes = Math.ceil((T.b - T.a) / 2), room = info.free + info.keys[T.i].size - 65536;
+  const bytes = (T.b - T.a) * 2, room = info.free + info.keys[T.i].size - 65536;
   const keep = s => s.replace(/ /g, ' ');  // xuống dòng chỉ ở dấu ·, không bẻ "108 KB"
   $('#trimInfo').textContent = keep(`Đoạn dài ${fmtLen((T.b - T.a) / RATE)}`) + ' · ' + keep(`khoảng ${kb(bytes)}`);
   const over = bytes > room;
@@ -578,7 +596,7 @@ window.addEventListener('resize', () => T && drawWave());
 function upload(i, bytes, name, onProgress) {
   return new Promise((resolve, reject) => {
     const form = new FormData();
-    form.append('file', new Blob([bytes]), 's.adp');
+    form.append('file', new Blob([bytes]), 's.p16');
     const x = new XMLHttpRequest();
     x.open('POST', `/upload?btn=${i + 1}&size=${bytes.byteLength}&name=${encodeURIComponent(name)}`);
     x.upload.onprogress = e => e.lengthComputable && onProgress(e.loaded / e.total);
@@ -603,7 +621,7 @@ async function replaceSound(i, file) {
       bar.hidden = false;
       busy++;
       try {
-        await upload(i, encodeAdpcm(seg), name, p => {
+        await upload(i, encodePcm16(seg), name, p => {
           bar.firstElementChild.style.width = (p * 100).toFixed(0) + '%';
           meta.textContent = `Đang gửi… ${(p * 100).toFixed(0)}%`;
         });

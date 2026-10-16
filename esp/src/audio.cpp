@@ -1,8 +1,9 @@
 // Phát âm thanh qua I2S chuẩn (Philips, 16-bit mono) tới ampli số MAX98357A.
 // I2S chạy bằng DMA nên không tốn CPU và không bị giật khi WiFi bận.
 //
-// File âm thanh nén IMA ADPCM 4-bit (web nén trước khi gửi): 1 byte = 2 mẫu, nibble thấp
-// trước, trạng thái bắt đầu từ 0. Nhẹ hơn PCM 16-bit 4 lần.
+// Âm phím lưu PCM 16-bit little-endian (/sN.p16, web xử lý sẵn trước khi gửi). Âm WiFi nhúng
+// trong firmware và âm phím bản cũ (/sN.adp) là IMA ADPCM 4-bit: 1 byte = 2 mẫu, nibble thấp
+// trước, trạng thái bắt đầu từ 0. ADPCM nhẹ hơn 4 lần nhưng giọng nói bị "sạn" (SNR ~24 dB).
 //
 // MAX98357A nhận số nên im lặng là mẫu 0, không có mức nghỉ, lọc RC hay nhiễu nguồn 3V3 như
 // ngõ ra PDM cũ. Chip tự chống "bụp" khi bật/tắt và tự tắt tiếng khi mất xung BCLK.
@@ -207,8 +208,9 @@ void powerDown() {
 
 void playerTask(void *) {
   static int16_t buf[CHUNK];
-  static uint8_t raw[CHUNK / 2];   // CHUNK mẫu ADPCM
+  static uint8_t raw[CHUNK * 2];   // CHUNK mẫu PCM 16-bit (ADPCM chỉ dùng CHUNK / 2 byte đầu)
   File file;
+  bool pcm = false;                // file đang phát: PCM 16-bit hay ADPCM
   bool wifiSound = false;
   Adpcm adpcm;
   DcBlock dc;
@@ -230,13 +232,14 @@ void playerTask(void *) {
     uint8_t vol = volume;
     return wifiSound ? (int32_t)(gainQ16(max<uint8_t>(vol, 40)) * WIFI_SOUND_GAIN) : gainQ16(vol);
   };
-  auto openSound = [&](const String &path) {
+  auto openSound = [&](const String &path, bool isPcm) {
     file = FFat.open(path, "r");
     if (!file) return false;
+    pcm = isPcm;
     adpcm = Adpcm();
     dc = DcBlock();
     filePos = 0;
-    fileTotal = file.size() * 2;
+    fileTotal = pcm ? file.size() / 2 : file.size() * 2;
     gain = fileGain();
     return true;
   };
@@ -268,11 +271,15 @@ void playerTask(void *) {
       if (cmd.key == CMD_OFF) { busy = false; if (!idle) powerDown(); continue; }
 
       if (cmd.key >= 0) {  // chỉ phát âm của phím, không kèm âm báo
-        if (!openSound(soundPath(cmd.key))) { busy = false; continue; }
+        // âm nạp từ bản cũ (ADPCM) vẫn phát được tới khi nạp lại
+        bool ok = FFat.exists(soundPath(cmd.key)) ? openSound(soundPath(cmd.key), true)
+                                                  : openSound(legacySoundPath(cmd.key), false);
+        if (!ok) { busy = false; continue; }
+        log_i("Phat phim %d: %s, %u byte", cmd.key + 1, pcm ? "PCM 16-bit" : "ADPCM (ban cu)", file.size());
         playingKey = cmd.key;
       } else if (cmd.tone == TONE_WIFI_ON || cmd.tone == TONE_WIFI_OFF) {  // nhạc báo bật / tắt WiFi
         wifiSound = true;
-        if (!openSound(cmd.tone == TONE_WIFI_ON ? WIFI_ON_PATH : WIFI_OFF_PATH)) {
+        if (!openSound(cmd.tone == TONE_WIFI_ON ? WIFI_ON_PATH : WIFI_OFF_PATH, false)) {
           wifiSound = false;
           busy = false;
           continue;
@@ -340,7 +347,7 @@ void playerTask(void *) {
         else { note = nullptr; busy = false; }
       }
     } else {
-      size_t got = file.read(raw, sizeof(raw));
+      size_t got = file.read(raw, pcm ? CHUNK * 2 : CHUNK / 2);
       if (!got) {
         file.close();
         wifiSound = false;
@@ -349,11 +356,12 @@ void playerTask(void *) {
         fadeOutLast();  // file bị cắt giữa chừng thì vẫn tắt êm
         continue;
       }
-      n = got * 2;
+      n = pcm ? got / 2 : got * 2;
       int32_t target = fileGain();  // âm lượng đổi lúc đang phát: trượt dần trong 1 khối
       for (size_t j = 0; j < n; j++, filePos++) {
-        uint8_t nib = j & 1 ? raw[j / 2] >> 4 : raw[j / 2] & 0x0F;
-        int32_t s = dc.next(adpcm.next(nib));
+        int16_t raw16 = pcm ? (int16_t)(raw[2 * j] | raw[2 * j + 1] << 8)
+                            : adpcm.next(j & 1 ? raw[j / 2] >> 4 : raw[j / 2] & 0x0F);
+        int32_t s = dc.next(raw16);
         int32_t env = 65536;  // vào/ra êm vài ms để không kêu "tách" ở hai đầu đoạn cắt
         if (filePos < FADE_IN) env = filePos * 65536 / FADE_IN;
         uint32_t left = fileTotal > filePos ? fileTotal - filePos : 0;
@@ -376,7 +384,8 @@ void send(int8_t key, Tone t) {
 
 }  // namespace
 
-String soundPath(uint8_t key) { return "/s" + String(key + 1) + ".adp"; }
+String soundPath(uint8_t key) { return "/s" + String(key + 1) + ".p16"; }
+String legacySoundPath(uint8_t key) { return "/s" + String(key + 1) + ".adp"; }
 
 void audioBegin() {
   installWifiSounds();
