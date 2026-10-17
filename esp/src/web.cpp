@@ -74,6 +74,7 @@ void handleInfo() {
   touch();
   String j = "{\"vol\":" + String(audioVolume());
   j += ",\"bat\":" + String(batteryPercent());
+  j += ",\"mv\":" + String(batteryMv());
   j += ",\"free\":" + String((uint32_t)FFat.freeBytes());
   j += ",\"total\":" + String((uint32_t)FFat.totalBytes());
   j += ",\"playing\":" + String(audioPlayingKey());
@@ -101,7 +102,7 @@ void handleState() {
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json",
               "{\"playing\":" + String(audioPlayingKey()) + ",\"vol\":" + String(audioVolume()) +
-              ",\"bat\":" + String(batteryPercent()) + "}");
+              ",\"bat\":" + String(batteryPercent()) + ",\"mv\":" + String(batteryMv()) + "}");
 }
 
 void handlePlay() {

@@ -106,7 +106,7 @@
   <div class="card banner" id="offline" hidden>
     <div>
       <b>Mất kết nối với SoundPad</b>
-      <span class="mut">Bật lại WiFi bằng nút KEY trên board, vào lại mạng SoundPad rồi bấm Thử lại.</span>
+      <span class="mut">Bật lại WiFi bằng cách giữ phím [1]+[4] khoảng 1 giây, vào lại mạng SoundPad rồi bấm Thử lại.</span>
     </div>
     <button id="retry">Thử lại</button>
   </div>
@@ -222,7 +222,7 @@ for (let i = 0; i < N; i++) {
 function render() {
   setVol(info.vol);
   $('#vol').disabled = false;
-  showBat(info.bat);
+  showBat(info.bat, info.mv);
   info.keys.forEach((s, i) => {
     const k = $('#k' + i);
     if (k.dataset.busy) return;
@@ -247,8 +247,10 @@ function setVol(v) {
   $('#volv').textContent = v + '%';
 }
 
-function showBat(b) {
-  $('#bat').textContent = b >= 0 ? `Pin ${b}%` : '';
+function showBat(b, mv) {
+  // kèm điện áp để biết pin yếu thật hay đo sai
+  const v = mv > 0 ? ` · ${(mv / 1000).toFixed(2).replace('.', ',')} V` : '';
+  $('#bat').textContent = b >= 0 ? `Pin ${b}%${v}` : v ? `Pin ?${v}` : '';  // ? = số đo vô lý
   $('#bat').classList.toggle('err', b >= 0 && b < 20);
 }
 
@@ -652,7 +654,7 @@ setInterval(async () => {
     const s = await (await req('/state')).json();
     if (!wasOnline) return await load();  // vừa kết nối lại -> tải lại toàn bộ
     showPlaying(s.playing);
-    showBat(s.bat);
+    showBat(s.bat, s.mv);
     // âm lượng đổi bằng phím thật -> cập nhật thanh kéo (trừ lúc đang kéo)
     if (info && s.vol !== info.vol && Date.now() - volTouched > 1500) { info.vol = s.vol; setVol(s.vol); }
   } catch (e) {

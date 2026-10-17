@@ -41,12 +41,12 @@ GPIO 18 ── MAX98357A SD             MAX98357A + / − ── loa
 | Nhấn lại phím đang phát | Phát lại từ đầu |
 | `[3]+[4]` | Tăng âm lượng; giữ → tăng liên tục; mỗi nấc bíp ở mức mới |
 | `[1]+[2]` | Giảm âm lượng; giữ → giảm liên tục; mỗi nấc bíp ở mức mới |
-| Nút **KEY** có sẵn trên board (GPIO 14) | Bật/tắt WiFi |
+| Giữ `[1]+[4]` ~1 giây | Bật/tắt WiFi (nhả sớm thì bỏ qua) |
 | Tổ hợp khác | Bỏ qua |
 
 ## 3. WiFi
 
-- Mở máy: WiFi mặc định tắt. Bật/tắt bằng nút KEY trên board.
+- Mở máy: WiFi mặc định tắt. Bật/tắt bằng cách giữ `[1]+[4]` ~1 giây.
 - Không ai dùng web trong 2 phút → WiFi tự tắt.
 
 ## 4. Pin và tiết kiệm điện
@@ -64,7 +64,7 @@ Thức dậy từ ngủ sâu:
 |---|---|
 | Nhấn 1 phím | Dậy (~0,3–0,5 s) và phát âm của phím đó |
 | Giữ tổ hợp phím | Dậy và làm việc của tổ hợp (giữ tới khi nghe bíp) |
-| Nhấn nút KEY | Dậy và bật WiFi |
+| Giữ `[1]+[4]` ~1 giây | Dậy và bật WiFi |
 | Gạt công tắc / nút RST | Khởi động lại |
 | Cắm USB | Không tự dậy, vẫn sạc. Đang thức mà cắm vào máy tính thì không ngủ nữa (giữ cổng COM) cho tới khi rút |
 | Ngủ vì pin cạn, nhấn phím | Dậy kiểm tra pin; còn yếu → ngủ lại, không kêu |

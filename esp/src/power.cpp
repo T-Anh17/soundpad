@@ -11,10 +11,18 @@ int mv = 0;
 uint32_t lastRead = 0;
 
 int readMv() {
+  // Chạy pin thì mạch chia áp đo pin chỉ có điện khi LCD_POWER_PIN cao (để thấp đọc ra ~0,2 V).
+  // Bật lúc đo rồi tắt lại cho đỡ hao
+  digitalWrite(LCD_POWER_PIN, HIGH);
+  delay(5);
   uint32_t sum = 0;
   for (int i = 0; i < 8; i++) sum += analogReadMilliVolts(BAT_ADC_PIN);
+  digitalWrite(LCD_POWER_PIN, LOW);
   return sum / 8 * 2;  // board chia áp 1/2
 }
+
+// Chip còn chạy thì pin không thể dưới mức này -> số đo sai, đừng coi là pin cạn
+bool valid() { return mv >= BAT_MIN_VALID_MV; }
 
 // Điện áp Li-Po lúc nghỉ -> %
 const int16_t CURVE[][2] = {
@@ -45,6 +53,7 @@ void powerUpdate(bool audioBusy) {
 int batteryMv() { return mv; }
 
 int batteryPercent() {
+  if (!valid()) return -1;
   if (mv >= CURVE[0][0]) return 100;
   for (size_t i = 1; i < sizeof(CURVE) / sizeof(CURVE[0]); i++) {
     if (mv >= CURVE[i][0]) {
@@ -55,7 +64,7 @@ int batteryPercent() {
   return 0;
 }
 
-bool batteryCritical() { return mv < BAT_CRITICAL_MV; }
+bool batteryCritical() { return valid() && mv < BAT_CRITICAL_MV; }
 
 uint32_t wakeKeyMask() {
   if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_EXT1) return 0;
@@ -63,13 +72,11 @@ uint32_t wakeKeyMask() {
   uint32_t mask = 0;
   for (uint8_t i = 0; i < KEY_COUNT; i++)
     if (gpios & (1ULL << KEY_PINS[i])) mask |= 1u << i;
-  if (gpios & (1ULL << WIFI_KEY_PIN)) mask |= 1u << KEY_COUNT;
   return mask;
 }
 
 void lightSleep(uint32_t maxMs) {
   for (uint8_t i = 0; i < KEY_COUNT; i++) gpio_wakeup_enable((gpio_num_t)KEY_PINS[i], GPIO_INTR_LOW_LEVEL);
-  gpio_wakeup_enable((gpio_num_t)WIFI_KEY_PIN, GPIO_INTR_LOW_LEVEL);
   esp_sleep_enable_gpio_wakeup();
   esp_sleep_enable_timer_wakeup((uint64_t)maxMs * 1000);
 
@@ -77,15 +84,14 @@ void lightSleep(uint32_t maxMs) {
 
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
   for (uint8_t i = 0; i < KEY_COUNT; i++) gpio_wakeup_disable((gpio_num_t)KEY_PINS[i]);
-  gpio_wakeup_disable((gpio_num_t)WIFI_KEY_PIN);
 }
 
 void deepSleep() {
   audioShutdown();
 
   uint64_t mask = 0;
-  for (uint8_t i = 0; i <= KEY_COUNT; i++) {  // 4 phím + nút KEY
-    gpio_num_t pin = (gpio_num_t)(i < KEY_COUNT ? KEY_PINS[i] : WIFI_KEY_PIN);
+  for (uint8_t i = 0; i < KEY_COUNT; i++) {
+    gpio_num_t pin = (gpio_num_t)KEY_PINS[i];
     mask |= 1ULL << pin;
     rtc_gpio_pullup_en(pin);    // giữ điện trở kéo lên khi ngủ sâu
     rtc_gpio_pulldown_dis(pin);

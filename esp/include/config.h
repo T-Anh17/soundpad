@@ -4,7 +4,6 @@
 // ---------------- Chân ----------------
 static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], chân còn lại -> GND
 #define KEY_COUNT 4
-#define WIFI_KEY_PIN   14   // nút KEY có sẵn trên board: nhấn để bật/tắt WiFi
 
 // Ampli số MAX98357A (I2S). VIN -> (+) pin sau công tắc, GND -> (−) pin. Xem PLAN.md
 #define AUDIO_DIN_PIN  11   // -> DIN
@@ -12,7 +11,7 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 #define AUDIO_LRC_PIN  13   // -> LRC (WS)
 #define AMP_SD_PIN     18   // -> SD (SD_MODE). Thấp = ampli tắt. Không nối (ampli luôn bật) thì đặt -1
 #define BAT_ADC_PIN    4    // đo pin, có sẵn trên board (chia áp 1/2)
-#define LCD_POWER_PIN  15   // nguồn màn hình (đã tháo) -> giữ LOW cho đỡ hao
+#define LCD_POWER_PIN  15   // nguồn màn hình (đã tháo) -> giữ LOW, chỉ bật lúc đo pin
 #define LCD_BL_PIN     38   // đèn nền màn hình -> giữ LOW
 
 // ---------------- Âm thanh ----------------
@@ -36,9 +35,11 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 
 // ---------------- Phím ----------------
 #define DEBOUNCE_MS             15
-#define COMBO_WINDOW_MS         50   // chờ phím thứ 2 trước khi phát
+#define COMBO_WINDOW_MS         100  // chờ phím thứ 2 trước khi phát (phím đơn trễ chừng này)
+#define COMBO_CONFIRM_MS        150  // 2 phím nhấn lệch nhau: giữ cả hai chừng này mới là tổ hợp
 #define VOLUME_REPEAT_DELAY_MS  400  // giữ tổ hợp bao lâu thì bắt đầu đổi liên tục
 #define VOLUME_REPEAT_MS        250
+#define WIFI_HOLD_MS            1000 // giữ [1]+[4] bao lâu thì bật/tắt WiFi
 
 // ---------------- WiFi ----------------
 #define AP_SSID           "SoundPad"
@@ -48,6 +49,7 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 // ---------------- Pin & ngủ ----------------
 #define DEEP_SLEEP_IDLE_MS  (5 * 60 * 1000UL)
 #define BAT_CRITICAL_MV     3300  // dưới mức này: không phát, ngủ sâu
+#define BAT_MIN_VALID_MV    2500  // đọc dưới mức này là đo sai (chip không chạy nổi) -> bỏ qua
 
 #ifndef ENABLE_SLEEP
 #define ENABLE_SLEEP 1

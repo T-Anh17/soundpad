@@ -4,8 +4,8 @@ Chạy:  python web/dev_server.py     rồi mở http://localhost:8790
 
 API (firmware sẽ làm y hệt):
   GET  /                 trang web
-  GET  /info             {vol, bat, free, total, playing, keys:[{name, size}]}
-  GET  /state            {playing, vol, bat}      (trang hỏi mỗi giây)
+  GET  /info             {vol, bat, mv, free, total, playing, keys:[{name, size}]}
+  GET  /state            {playing, vol, bat, mv}  (trang hỏi mỗi giây)
   POST /play?btn=N       phát thử phím N (1..4)
   POST /volume?v=0..100[&save=1]
   POST /delete?btn=N
@@ -22,7 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RATE = 22321  # trùng RATE trong index.html
 TOTAL = 13_400_000  # ~12.8 MB như phân vùng FFat thật (esp/partitions.csv)
 
-state = {"vol": 70, "bat": 82, "playing": -1, "keys": [{"name": "", "size": 0} for _ in range(4)]}
+state = {"vol": 70, "bat": 82, "mv": 3980, "playing": -1, "keys": [{"name": "", "size": 0} for _ in range(4)]}
 stop_timer = None
 
 
@@ -54,7 +54,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             used = sum(k["size"] for k in state["keys"])
             return self.reply(200, json.dumps({**state, "free": TOTAL - used, "total": TOTAL}), "application/json")
         if path == "/state":
-            return self.reply(200, json.dumps({"playing": state["playing"], "vol": state["vol"], "bat": state["bat"]}), "application/json")
+            return self.reply(200, json.dumps({"playing": state["playing"], "vol": state["vol"], "bat": state["bat"], "mv": state["mv"]}), "application/json")
         self.reply(404, "Not found")
 
     def do_POST(self):

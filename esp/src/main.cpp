@@ -24,7 +24,11 @@ void saveVolume() { prefs.putUChar("vol", audioVolume()); }
 // Nhấn phím chỉ phát đúng âm của phím, không kèm âm báo nào
 void onKeyPlay(uint8_t key) {
   markActivity();
-  if (batteryCritical()) return;  // pin cạn: không phát
+  if (batteryCritical()) {  // pin cạn: không phát
+    log_w("Pin can (%d mV), bo qua phim [%d]", batteryMv(), key + 1);
+    return;
+  }
+  log_i("Phat phim [%d]", key + 1);
   audioPlayKey(key);
 }
 
@@ -92,8 +96,9 @@ void loop() {
   static uint32_t lastBeat = 0;
   if (millis() - lastBeat >= 5000) {
     lastBeat = millis();
-    log_i("Song %lus, WiFi %s, %d may, RAM trong %u", millis() / 1000, wifiIsOn() ? "bat" : "tat",
-          wifiIsOn() ? WiFi.softAPgetStationNum() : 0, ESP.getFreeHeap());
+    log_i("Song %lus, WiFi %s, %d may, RAM trong %u, pin %d mV (%d%%), ly do reset %d", millis() / 1000,
+          wifiIsOn() ? "bat" : "tat", wifiIsOn() ? WiFi.softAPgetStationNum() : 0, ESP.getFreeHeap(),
+          batteryMv(), batteryPercent(), esp_reset_reason());
   }
 #endif
 
