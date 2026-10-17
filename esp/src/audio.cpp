@@ -32,7 +32,7 @@ enum : int8_t {   // Cmd.key < 0
 };
 
 struct Cmd {
-  int8_t key;     // >=0: phát phím, <0: CMD_*
+  int8_t key;     // >=0: phát ô âm, <0: CMD_*
   uint8_t tone;   // Tone khi key = CMD_TONE
 };
 
@@ -109,7 +109,7 @@ bool IRAM_ATTR onUnderrun(i2s_chan_handle_t, i2s_event_data_t *, void *) {
   return false;
 }
 
-volatile int8_t playingKey = -1;
+volatile int8_t playingSound = -1;
 volatile bool busy = false;
 volatile bool idle = true;
 volatile uint8_t volume = VOLUME_DEFAULT;
@@ -276,7 +276,7 @@ void playerTask(void *) {
 
       if (file) file.close();
       chime = 0;
-      playingKey = -1;
+      playingSound = -1;
       note = nullptr;
       if (!idle) fadeOutLast();
 
@@ -288,10 +288,10 @@ void playerTask(void *) {
         bool ok = FFat.exists(soundPath(cmd.key)) ? openSound(soundPath(cmd.key), true)
                                                   : openSound(legacySoundPath(cmd.key), false);
         if (!ok) { busy = false; continue; }
-        log_i("Phat phim %d: %s, %u byte", cmd.key + 1, pcm ? "PCM 16-bit" : "ADPCM (ban cu)", file.size());
+        log_i("Phat am %d: %s, %u byte", cmd.key + 1, pcm ? "PCM 16-bit" : "ADPCM (ban cu)", file.size());
         underrunsAtStart = underruns;
         readMaxUs = 0;
-        playingKey = cmd.key;
+        playingSound = cmd.key;
       } else if (cmd.tone == TONE_BOOT) {  // ding mở nguồn, PCM 16-bit
         chime = BOOT_SOUND_GAIN;
         if (!openSound(BOOT_PATH, true)) {
@@ -373,12 +373,12 @@ void playerTask(void *) {
       size_t got = file.read(raw, pcm ? CHUNK * 2 : CHUNK / 2);
       readMaxUs = max<uint32_t>(readMaxUs, micros() - t0);
       if (!got) {
-        if (playingKey >= 0)
-          log_i("Phim %d xong: hut du lieu %u lan, doc file lau nhat %u us", playingKey + 1,
+        if (playingSound >= 0)
+          log_i("Am %d xong: hut du lieu %u lan, doc file lau nhat %u us", playingSound + 1,
                 underruns - underrunsAtStart, readMaxUs);
         file.close();
         chime = 0;
-        playingKey = -1;
+        playingSound = -1;
         busy = false;
         fadeOutLast();  // file bị cắt giữa chừng thì vẫn tắt êm
         continue;
@@ -411,8 +411,8 @@ void send(int8_t key, Tone t) {
 
 }  // namespace
 
-String soundPath(uint8_t key) { return "/s" + String(key + 1) + ".p16"; }
-String legacySoundPath(uint8_t key) { return "/s" + String(key + 1) + ".adp"; }
+String soundPath(uint8_t slot) { return "/s" + String(slot + 1) + ".p16"; }
+String legacySoundPath(uint8_t slot) { return "/s" + String(slot + 1) + ".adp"; }
 
 void audioBegin() {
   installWifiSounds();
@@ -452,12 +452,12 @@ void audioBegin() {
   xTaskCreatePinnedToCore(playerTask, "player", 4096, nullptr, 5, nullptr, 1);
 }
 
-void audioPlayKey(uint8_t key) { send(key, TONE_NONE); }
+void audioPlaySound(uint8_t slot) { send(slot, TONE_NONE); }
 void audioTone(Tone t) { send(CMD_TONE, t); }
 
 void audioStop() {
   send(CMD_STOP, TONE_NONE);
-  for (int i = 0; i < 100 && (busy || playingKey >= 0 || uxQueueMessagesWaiting(queue)); i++) delay(5);
+  for (int i = 0; i < 100 && (busy || playingSound >= 0 || uxQueueMessagesWaiting(queue)); i++) delay(5);
 }
 
 // Chỉ gửi khi hàng đợi trống để không đè lệnh phát đang chờ
@@ -475,7 +475,7 @@ void audioShutdown() {
   // ampli đã tắt, chân SD_MODE đang được giữ thấp suốt lúc ngủ sâu (xem ampEnable)
 }
 
-int audioPlayingKey() { return playingKey; }
+int audioPlayingSound() { return playingSound; }
 bool audioBusy() { return busy || uxQueueMessagesWaiting(queue); }
 bool audioIdle() { return idle && !uxQueueMessagesWaiting(queue); }
 

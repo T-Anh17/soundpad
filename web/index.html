@@ -50,6 +50,23 @@
   .bar { grid-column: 1 / -1; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 6px; }
   .bar i { display: block; height: 100%; width: 0; background: var(--acc); }
 
+  h2.sec { font-size: 15px; margin: 18px 2px 8px; display: flex; justify-content: space-between; align-items: baseline; }
+  h2.sec span { font-weight: 400; }
+
+  /* ---- Chế độ: hai nút liền nhau ---- */
+  .seg { display: grid; grid-template-columns: 1fr 1fr; margin: 8px 0 6px; border: 1px solid var(--line-strong); border-radius: 9px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; min-height: 40px; }
+  .seg button + button { border-left: 1px solid var(--line-strong); }
+  .seg button[aria-pressed=true] { background: var(--acc); color: var(--on-acc); }
+
+  /* ---- Gán phím ---- */
+  .assign { display: grid; gap: 8px; margin-top: 8px; }
+  .assign label { display: grid; grid-template-columns: 4.2em minmax(0, 1fr); align-items: center; gap: 10px; font-weight: 600; }
+  .assign select { width: 100%; min-width: 0; height: 40px; padding: 0 10px; font: inherit; font-size: 15px; font-weight: 400; color: var(--fg);
+    background: var(--card); border: 1px solid var(--line-strong); border-radius: 8px; }
+  .assign select:focus { outline: none; border-color: var(--acc); box-shadow: 0 0 0 3px var(--ring); }
+  .assign select:disabled { opacity: .35; }
+
   button { font: inherit; font-size: 14px; border: 1px solid var(--line); background: transparent; color: var(--fg);
     border-radius: 8px; padding: 7px 11px; cursor: pointer; line-height: 1.2; }
   button:disabled { opacity: .35; cursor: default; }
@@ -116,9 +133,21 @@
     <div class="vol"><input type="range" id="vol" min="0" max="100" disabled><b id="volv">–</b></div>
   </div>
 
+  <div class="card">
+    <div class="mut">Chế độ phím</div>
+    <div class="seg" role="group" aria-label="Chế độ phím">
+      <button id="modeOne" aria-pressed="false" disabled>Đơn</button>
+      <button id="modeRnd" aria-pressed="false" disabled>Ngẫu nhiên</button>
+    </div>
+    <div class="mut" id="modeHint"></div>
+    <div class="assign" id="assign"></div>
+  </div>
+
+  <h2 class="sec">Âm thanh <span class="mut" id="count"></span></h2>
   <div id="keys"></div>
 
   <p class="mut" id="store"></p>
+  <p class="mut">Nút Nạp / Đổi không mở được file (trang tự bật lúc vào WiFi)? Mở Chrome hoặc Safari, vào <b>4.3.2.1</b>.</p>
 </main>
 
 <dialog id="trim" aria-labelledby="trimTitle">
@@ -154,7 +183,8 @@
 </dialog>
 
 <script>
-const RATE = 22321, N = 4;  // phải trùng SAMPLE_RATE trong esp/include/config.h
+const RATE = 22321;  // phải trùng SAMPLE_RATE trong esp/include/config.h
+const N = 10, KEYS = 4;  // trùng SOUND_COUNT, KEY_COUNT trong esp/include/config.h
 const MAX_FILE = 300e6;  // video lớn hơn thì điện thoại dễ hết RAM khi tách tiếng
 const $ = s => document.querySelector(s);
 const secs = bytes => bytes / 2 / RATE;  // PCM 16-bit: 2 byte = 1 mẫu
@@ -187,18 +217,18 @@ function setOnline(ok) {
   online = ok;
   $('#offline').hidden = ok;
   if (!ok) {
-    document.querySelectorAll('#keys button, #vol').forEach(b => b.disabled = true);
+    document.querySelectorAll('#keys button, #vol, .seg button, #assign select').forEach(b => b.disabled = true);
     showPlaying(-1);
   }
 }
 
-// ---- Dựng 4 ô phím ----
+// ---- Dựng 10 ô âm + 4 dòng gán phím ----
 $('#keys').innerHTML = [...Array(N)].map((_, i) => `
   <div class="card key" id="k${i}">
     <div class="name"></div>
     <div class="btns">
       <button class="pri" data-a="play" title="Phát thử" disabled>▶</button>
-      <button data-a="pick" disabled>Đổi</button>
+      <button data-a="pick" disabled>Nạp</button>
       <input type="file" accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.aac,.mp4,.mov" hidden>
       <button data-a="del" title="Xoá" disabled>✕</button>
     </div>
@@ -208,37 +238,80 @@ $('#keys').innerHTML = [...Array(N)].map((_, i) => `
 
 for (let i = 0; i < N; i++) {
   const k = $('#k' + i);
-  k.querySelector('[data-a=play]').onclick = () => post('/play?btn=' + (i + 1)).catch(() => {});
+  k.querySelector('[data-a=play]').onclick = () => post('/play?slot=' + (i + 1)).catch(() => {});
   k.querySelector('[data-a=del]').onclick = async () => {
-    if (!confirm(`Xoá âm thanh phím ${i + 1}?`)) return;
-    try { await post('/delete?btn=' + (i + 1)); await load(); } catch (e) {}
+    if (!confirm(`Xoá âm thanh ${i + 1}?`)) return;
+    try { await post('/delete?slot=' + (i + 1)); await load(); } catch (e) {}
   };
   const file = k.querySelector('input[type=file]');
   k.querySelector('[data-a=pick]').onclick = () => file.click();
   file.onchange = () => { if (file.files[0]) replaceSound(i, file.files[0]); file.value = ''; };
 }
 
+$('#assign').innerHTML = [...Array(KEYS)].map((_, k) =>
+  `<label>Phím ${k + 1}<select id="m${k}" disabled></select></label>`).join('');
+for (let k = 0; k < KEYS; k++) $('#m' + k).onchange = async e => {
+  const slot = +e.target.value;
+  try { await post(`/assign?key=${k + 1}&slot=${slot + 1}`); info.map[k] = slot; } catch (err) {}
+  e.target.blur();
+  render();
+};
+
+async function setMode(random) {
+  if (random === info.random) return;
+  try { await post('/mode?random=' + (random ? 1 : 0)); info.random = random; render(); } catch (e) {}
+}
+$('#modeOne').onclick = () => setMode(false);
+$('#modeRnd').onclick = () => setMode(true);
+
+const soundLabel = (s, i) => `${i + 1}. ` + (s.size ? (s.name || 'Không tên') : 'Chưa có âm thanh');
+
 // ---- Hiển thị trạng thái ----
 function render() {
   setVol(info.vol);
   $('#vol').disabled = false;
   showBat(info.bat, info.mv);
-  info.keys.forEach((s, i) => {
+  renderMode();
+  info.sounds.forEach((s, i) => {
     const k = $('#k' + i);
     if (k.dataset.busy) return;
     const name = k.querySelector('.name');
-    name.textContent = `${i + 1}. ` + (s.size ? (s.name || 'Không tên') : 'Chưa có âm thanh');
+    name.textContent = soundLabel(s, i);
     name.title = name.textContent;
     name.classList.toggle('empty', !s.size);
     const meta = k.querySelector('.meta');
     meta.className = 'mut meta';
-    meta.textContent = s.size ? sec(s.size) : '';
+    // chế độ đơn: ghi kèm phím nào đang phát âm này
+    const keys = info.random ? [] : info.map.map((m, kk) => m === i ? kk + 1 : 0).filter(Boolean);
+    meta.textContent = [s.size ? sec(s.size) : '', keys.length ? 'Phím ' + keys.join(', ') : ''].filter(Boolean).join(' · ');
     k.querySelector('[data-a=play]').disabled = !s.size;
     k.querySelector('[data-a=pick]').disabled = false;
+    k.querySelector('[data-a=pick]').textContent = s.size ? 'Đổi' : 'Nạp';
     k.querySelector('[data-a=del]').disabled = !s.size;
   });
+  $('#count').textContent = `${info.sounds.filter(s => s.size).length}/${N}`;
   $('#store').textContent = `Bộ nhớ còn trống khoảng ${dur(info.free)} âm thanh`;
   showPlaying(info.playing);
+}
+
+function renderMode() {
+  const rnd = info.random, have = info.sounds.filter(s => s.size).length;
+  $('#modeOne').setAttribute('aria-pressed', !rnd);
+  $('#modeRnd').setAttribute('aria-pressed', rnd);
+  $('#modeOne').disabled = $('#modeRnd').disabled = false;
+  $('#assign').hidden = rnd;
+  $('#modeHint').textContent = rnd
+    ? (have ? `Nhấn phím nào cũng phát ngẫu nhiên 1 trong ${have} âm đã nạp, không lặp lại âm vừa phát.`
+            : 'Chưa nạp âm nào, nạp ở danh sách bên dưới.')
+    : 'Mỗi phím phát âm được gán cho nó:';
+  for (let k = 0; k < KEYS; k++) {
+    const sel = $('#m' + k);
+    if (document.activeElement === sel) continue;  // đang chọn dở
+    sel.innerHTML = info.sounds.map((s, i) => `<option value="${i}"></option>`).join('');
+    info.sounds.forEach((s, i) => sel.options[i].textContent = soundLabel(s, i));
+    sel.value = info.map[k];
+    sel.disabled = false;
+  }
 }
 
 function setVol(v) {
@@ -449,9 +522,9 @@ function pickSegment(i, name, pcm) {
   if (b - a > RATE * 20) b = a + RATE * 10;
   T = { i, pcm, a, b: Math.min(pcm.length, Math.max(b, a + MIN_LEN)), peaks: null };
 
-  $('#trimTitle').textContent = `Chọn đoạn cho phím ${i + 1}`;
+  $('#trimTitle').textContent = `Chọn đoạn cho âm ${i + 1}`;
   $('#trimFile').textContent = name;
-  $('#trimSave').textContent = `Lưu vào phím ${i + 1}`;
+  $('#trimSave').textContent = `Lưu vào ô ${i + 1}`;
   $('#endMax').textContent = fmt(pcm.length / RATE);
   $('#trimErr').hidden = true;
   dlg.showModal();
@@ -505,7 +578,7 @@ function updateTrim() {
     th.setAttribute('aria-valuetext', fmt(v / RATE));
     if (document.activeElement !== inp) inp.value = fmt(v / RATE);
   }
-  const bytes = (T.b - T.a) * 2, room = info.free + info.keys[T.i].size - 65536;
+  const bytes = (T.b - T.a) * 2, room = info.free + info.sounds[T.i].size - 65536;
   const keep = s => s.replace(/ /g, ' ');  // xuống dòng chỉ ở dấu ·, không bẻ "108 KB"
   $('#trimInfo').textContent = keep(`Đoạn dài ${fmtLen((T.b - T.a) / RATE)}`) + ' · ' + keep(`khoảng ${kb(bytes)}`);
   const over = bytes > room;
@@ -600,7 +673,7 @@ function upload(i, bytes, name, onProgress) {
     const form = new FormData();
     form.append('file', new Blob([bytes]), 's.p16');
     const x = new XMLHttpRequest();
-    x.open('POST', `/upload?btn=${i + 1}&size=${bytes.byteLength}&name=${encodeURIComponent(name)}`);
+    x.open('POST', `/upload?slot=${i + 1}&size=${bytes.byteLength}&name=${encodeURIComponent(name)}`);
     x.upload.onprogress = e => e.lengthComputable && onProgress(e.loaded / e.total);
     x.onload = () => x.status === 200 ? resolve() : reject(new Error(x.responseText || 'Lỗi ' + x.status));
     x.onerror = () => reject(new Error('Mất kết nối với thiết bị'));

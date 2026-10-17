@@ -1,6 +1,6 @@
 # SoundPad — Plan
 
-4 phím cơ, mỗi phím phát 1 đoạn âm thanh. Đổi âm thanh và chỉnh âm lượng qua web local. Chạy pin.
+4 phím cơ phát âm thanh từ kho 10 âm. Chế độ đơn: mỗi phím phát âm được gán; chế độ ngẫu nhiên: phím nào cũng phát 1 âm bất kỳ. Nạp âm, gán phím, chọn chế độ và chỉnh âm lượng qua web local. Chạy pin.
 
 ## 1. Phần cứng
 
@@ -36,7 +36,7 @@ GPIO 18 ── MAX98357A SD             MAX98357A + / − ── loa
 
 | Thao tác | Kết quả |
 |---|---|
-| Nhấn 1 phím | Chờ 0,05 s; không có phím thứ 2 → phát âm của phím đó |
+| Nhấn 1 phím | Chờ 0,1 s; không có phím thứ 2 → chế độ đơn: phát âm gán cho phím; chế độ ngẫu nhiên: phát 1 trong các âm đã nạp (không lặp lại âm vừa phát) |
 | Đang phát, nhấn phím khác | Tắt âm cũ, phát âm mới |
 | Nhấn lại phím đang phát | Phát lại từ đầu |
 | `[3]+[4]` | Tăng âm lượng; giữ → tăng liên tục; mỗi nấc bíp ở mức mới |
@@ -46,6 +46,7 @@ GPIO 18 ── MAX98357A SD             MAX98357A + / − ── loa
 
 ## 3. WiFi
 
+- Tên mạng "SoundPad", mật khẩu `123456788` (`AP_PASS` trong `esp/include/config.h`).
 - Mở máy: WiFi mặc định tắt. Bật/tắt bằng cách giữ `[1]+[4]` ~1 giây.
 - Không ai dùng web trong 2 phút → WiFi tự tắt.
 
@@ -84,23 +85,26 @@ Thức dậy từ ngủ sâu:
 |---|---|
 | Bật WiFi | Chuông báo sân bay, giây 1–5 (`esp/assets/wifi_chime.mp3` → `wifi_on.adp`, nhúng vào firmware) |
 | Tắt WiFi | Chuông báo sân bay, giây 9–13 (→ `wifi_off.adp`) |
+| Mở nguồn (gạt công tắc / RST) | Tiếng ding máy bay (`esp/assets/boot_ding.mp3` → `boot_ding.p16`) |
 | Đổi âm lượng | Bíp ở mức mới |
 
 Nhấn 1 phím không có âm báo, chỉ phát âm của phím.
 
 ## 6. Lưu âm thanh
 
-- Lưu trong flash 16 MB, phân vùng FFat ~12,8 MB. Âm phím lưu PCM 16-bit, 22321 Hz mono (~44 KB/giây) → ~4,8 phút tổng cộng. Không nén ADPCM 4-bit nữa: giọng nói bị "sạn" (SNR ~24 dB), rè ở mọi mức âm lượng. Âm phím bản cũ (`/sN.adp`) vẫn phát được tới khi nạp lại.
+- 10 ô âm (`/s1.p16` … `/s10.p16`). Phím gán ô nào và chế độ đơn / ngẫu nhiên lưu trong NVS. Bản cũ 4 phím: âm phím N nằm ở ô N, phím N mặc định phát ô N.
+- Lưu trong flash 16 MB, phân vùng FFat ~12,8 MB. Âm lưu PCM 16-bit, 22321 Hz mono (~44 KB/giây) → ~4,8 phút tổng cộng. Không nén ADPCM 4-bit nữa: giọng nói bị "sạn" (SNR ~24 dB), rè ở mọi mức âm lượng. Âm phím bản cũ (`/sN.adp`) vẫn phát được tới khi nạp lại.
 - Mất điện vẫn nhớ âm thanh và âm lượng.
 
 ## 7. Web local
 
-- Bật WiFi → điện thoại vào WiFi "SoundPad" (mạng mở) → trang cài đặt tự bật lên (captive portal). Nếu không tự bật: mở trình duyệt vào `192.168.4.1`.
-- Mỗi phím: tên âm thanh, độ dài, nút Phát thử / Đổi (mp3, m4a, wav, hoặc video mp4 / mov) / Xoá.
+- Bật WiFi → điện thoại vào WiFi "SoundPad" (mật khẩu ở mục 3) → trang cài đặt tự bật lên (captive portal; board ở địa chỉ 4.3.2.1 và báo DNS = 4.3.2.1 qua DHCP. Dùng 192.168.4.1 thì Samsung coi là mạng không có internet, không bật trang). Nếu không tự bật, hoặc nút Nạp không mở được file trong cửa sổ tự bật: mở Chrome / Safari vào `4.3.2.1`.
+- Chế độ phím: Đơn (4 ô chọn âm cho phím 1–4) / Ngẫu nhiên.
+- 10 ô âm: tên, độ dài, phím đang dùng, nút Phát thử / Nạp hoặc Đổi (mp3, m4a, wav, hoặc video mp4 / mov) / Xoá.
 - Chọn file xong hiện hộp chọn đoạn: sóng âm, kéo hai đầu hoặc gõ giây Từ / Đến, nghe thử trên điện thoại rồi mới lưu.
 - Trình duyệt tự tách âm thanh khỏi video, đổi định dạng, cắt khoảng lặng, lọc trầm dưới 700 Hz, chỉnh âm cho rõ giọng, nén động nhẹ, chuẩn hoá âm lượng rồi gửi lên dạng PCM 16-bit.
 - Thanh âm lượng (đồng bộ với âm lượng chỉnh bằng phím).
-- Phím đang phát sáng viền. Hiện bộ nhớ còn trống và % pin.
+- Ô âm đang phát sáng viền. Hiện bộ nhớ còn trống và % pin.
 
 ## 8. Thư mục và thứ tự làm
 

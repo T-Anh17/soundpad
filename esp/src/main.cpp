@@ -10,6 +10,7 @@
 #include "config.h"
 #include "keys.h"
 #include "power.h"
+#include "sounds.h"
 #include "web.h"
 
 Preferences prefs;
@@ -21,15 +22,20 @@ void saveVolume() { prefs.putUChar("vol", audioVolume()); }
 
 // ---------- Sự kiện phím ----------
 
-// Nhấn phím chỉ phát đúng âm của phím, không kèm âm báo nào
+// Nhấn phím chỉ phát âm (ô gán cho phím, hoặc ô ngẫu nhiên), không kèm âm báo nào
 void onKeyPlay(uint8_t key) {
   markActivity();
   if (batteryCritical()) {  // pin cạn: không phát
     log_w("Pin can (%d mV), bo qua phim [%d]", batteryMv(), key + 1);
     return;
   }
-  log_i("Phat phim [%d]", key + 1);
-  audioPlayKey(key);
+  int slot = soundForKey(key);
+  if (slot < 0) {
+    log_w("Phim [%d]: chua co am (%s)", key + 1, randomMode() ? "ngau nhien" : "che do don");
+    return;
+  }
+  log_i("Phim [%d] -> am %d%s", key + 1, slot + 1, randomMode() ? " (ngau nhien)" : "");
+  audioPlaySound(slot);
 }
 
 void onVolumeStep(int dir) {
@@ -74,6 +80,7 @@ void setup() {
   if (!FFat.begin(true)) log_e("Khong mo duoc FFat - kiem tra partitions.csv");
   // Bản cũ lưu PCM không nén (/sN.pcm): xoá cho trống bộ nhớ, cần nạp lại âm
   for (uint8_t k = 1; k <= KEY_COUNT; k++) FFat.remove("/s" + String(k) + ".pcm");
+  soundsBegin();
   audioBegin();
   webBegin();
 
@@ -109,7 +116,9 @@ void loop() {
 #endif
 
   bool playing = audioBusy();
-  powerUpdate(playing);
+  // Lúc WiFi bật số đo pin tụt về ~3,1 V dù pin còn 3,7 V (sai số, không phải pin cạn) -> bỏ qua,
+  // nếu không sẽ tưởng pin cạn rồi bỏ qua phím
+  powerUpdate(playing || wifiIsOn());
   if (playing) markActivity();
 
 #if ENABLE_SLEEP

@@ -58,8 +58,8 @@ void powerBegin() {
   log_i("Pin luc khoi dong: %d mV", mv);
 }
 
-void powerUpdate(bool audioBusy) {
-  if (audioBusy || millis() - lastRead < 5000) return;
+void powerUpdate(bool skip) {
+  if (skip || millis() - lastRead < 5000) return;
   lastRead = millis();
   int reading = readMv();
   countLow(reading);

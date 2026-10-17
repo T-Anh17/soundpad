@@ -4,6 +4,7 @@
 // ---------------- Chân ----------------
 static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], chân còn lại -> GND
 #define KEY_COUNT 4
+#define SOUND_COUNT 10  // số ô âm thanh lưu được (chế độ đơn: mỗi phím gán 1 ô; ngẫu nhiên: phát bất kỳ ô nào)
 
 // Ampli số MAX98357A (I2S). VIN -> (+) pin sau công tắc, GND -> (−) pin. Xem PLAN.md
 #define AUDIO_DIN_PIN  11   // -> DIN
@@ -44,7 +45,7 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 
 // ---------------- WiFi ----------------
 #define AP_SSID           "SoundPad"
-#define AP_PASS           ""   // trống = mạng mở. Muốn đặt mật khẩu thì ít nhất 8 ký tự
+#define AP_PASS           "123456788"  // ít nhất 8 ký tự. Trống = mạng mở
 #define WIFI_IDLE_OFF_MS  (2 * 60 * 1000UL)
 
 // ---------------- Pin & ngủ ----------------
