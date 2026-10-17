@@ -6,6 +6,7 @@ enum Tone : uint8_t {
   TONE_WIFI_ON,
   TONE_WIFI_OFF,
   TONE_VOLUME,
+  TONE_BOOT,  // tiếng ding lúc gạt công tắc mở nguồn
 };
 
 void audioBegin();

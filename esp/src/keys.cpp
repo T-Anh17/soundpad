@@ -61,6 +61,10 @@ void onPress(uint8_t k, uint32_t now) {
   audioWake();                // bật sẵn ngõ ra âm thanh trong lúc chờ tổ hợp
   if (combo != NONE || lateA >= 0) return;  // đang giữ / chờ tổ hợp: bỏ qua phím khác
 
+  // Cùng phím xuống lại trong cửa sổ chờ: dội phím (dài hơn DEBOUNCE_MS) hoặc gõ lại thật nhanh.
+  // Trước đây bị coi là "phím thứ 2 không thành tổ hợp" -> huỷ luôn, nhấn mà không kêu
+  if (firstKey == k) return;
+
   if (firstKey >= 0) {
     // phím thứ 2 trong cửa sổ chờ: phím đầu chưa phát
     uint8_t a = firstKey;

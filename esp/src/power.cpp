@@ -9,16 +9,28 @@ namespace {
 
 int mv = 0;
 uint32_t lastRead = 0;
+uint8_t lowReads = 0;  // số lần đo liên tiếp dưới BAT_CRITICAL_MV
 
 int readMv() {
   // Chạy pin thì mạch chia áp đo pin chỉ có điện khi LCD_POWER_PIN cao (để thấp đọc ra ~0,2 V).
   // Bật lúc đo rồi tắt lại cho đỡ hao
+  // Nguồn này có tụ: chờ 5ms là đo lúc áp còn đang lên -> ra thấp và nhảy lung tung (pin 3,9V
+  // mà đọc ~3,1V), tưởng pin cạn rồi bỏ qua phím
   digitalWrite(LCD_POWER_PIN, HIGH);
-  delay(5);
+  delay(BAT_SETTLE_MS);
+  analogReadMilliVolts(BAT_ADC_PIN);  // bỏ lần đầu
   uint32_t sum = 0;
-  for (int i = 0; i < 8; i++) sum += analogReadMilliVolts(BAT_ADC_PIN);
+  for (int i = 0; i < 16; i++) sum += analogReadMilliVolts(BAT_ADC_PIN);
   digitalWrite(LCD_POWER_PIN, LOW);
-  return sum / 8 * 2;  // board chia áp 1/2
+  return sum / 16 * 2;  // board chia áp 1/2
+}
+
+void countLow(int reading) {
+  if (reading >= BAT_MIN_VALID_MV && reading < BAT_CRITICAL_MV) {
+    if (lowReads < BAT_CRITICAL_READS) lowReads++;
+  } else {
+    lowReads = 0;
+  }
 }
 
 // Chip còn chạy thì pin không thể dưới mức này -> số đo sai, đừng coi là pin cạn
@@ -41,13 +53,18 @@ void powerBegin() {
   digitalWrite(LCD_BL_PIN, LOW);
 
   mv = readMv();
+  countLow(mv);
   lastRead = millis();
+  log_i("Pin luc khoi dong: %d mV", mv);
 }
 
 void powerUpdate(bool audioBusy) {
   if (audioBusy || millis() - lastRead < 5000) return;
   lastRead = millis();
-  mv = (mv * 7 + readMv() * 3) / 10;  // làm mượt
+  int reading = readMv();
+  countLow(reading);
+  mv = (mv * 7 + reading * 3) / 10;  // làm mượt
+  if (lowReads) log_w("Pin do duoc %d mV (thap lan %d/%d)", reading, lowReads, BAT_CRITICAL_READS);
 }
 
 int batteryMv() { return mv; }
@@ -64,7 +81,8 @@ int batteryPercent() {
   return 0;
 }
 
-bool batteryCritical() { return valid() && mv < BAT_CRITICAL_MV; }
+// Một lần đo thấp chưa chắc pin cạn (đo sai, vừa phát to, vừa bật WiFi): phải thấp nhiều lần liền
+bool batteryCritical() { return lowReads >= BAT_CRITICAL_READS; }
 
 uint32_t wakeKeyMask() {
   if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_EXT1) return 0;

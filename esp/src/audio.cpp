@@ -93,6 +93,7 @@ const uint32_t FADE_IN = SAMPLE_RATE * 3 / 1000;
 const uint32_t FADE_OUT = SAMPLE_RATE * 6 / 1000;
 const char *const WIFI_ON_PATH = "/wifi_on.adp";
 const char *const WIFI_OFF_PATH = "/wifi_off.adp";
+const char *const BOOT_PATH = "/boot.p16";
 
 QueueHandle_t queue;
 i2s_chan_handle_t tx;
@@ -113,21 +114,24 @@ volatile bool busy = false;
 volatile bool idle = true;
 volatile uint8_t volume = VOLUME_DEFAULT;
 
-uint32_t fileCrc32(File &file) {
-  uint32_t crc = 0xFFFFFFFFu;
-  while (file.available()) {
-    crc ^= (uint8_t)file.read();
-    for (uint8_t bit = 0; bit < 8; bit++)
-      crc = (crc >> 1) ^ (0xEDB88320u & (-(int32_t)(crc & 1)));
+// So file với bản nhúng theo từng khối. Bản cũ đọc từng byte để tính CRC (~89 nghìn lần đọc FFat
+// ở 80 MHz) mỗi lần bật máy -> phím chưa nhận trong lúc đó
+bool fileMatches(File &file, const uint8_t *data, size_t len) {
+  if (file.size() != len) return false;
+  static uint8_t buf[1024];
+  for (size_t pos = 0; pos < len;) {
+    size_t n = file.read(buf, min(sizeof(buf), len - pos));
+    if (!n || memcmp(buf, data + pos, n)) return false;
+    pos += n;
   }
-  return ~crc;
+  return true;
 }
 
 // Chép âm nhúng trong firmware ra FFat (chỉ khi khác bản đang có) để player đọc như âm phím
-void installSound(const char *path, const uint8_t *data, size_t len, uint32_t crc) {
+void installSound(const char *path, const uint8_t *data, size_t len) {
   File current = FFat.open(path, "r");
   if (current) {
-    bool matches = current.size() == len && fileCrc32(current) == crc;
+    bool matches = fileMatches(current, data, len);
     current.close();
     if (matches) return;
   }
@@ -144,8 +148,9 @@ void installSound(const char *path, const uint8_t *data, size_t len, uint32_t cr
 
 void installWifiSounds() {
   if (FFat.exists("/wifi.adp")) FFat.remove("/wifi.adp");  // bản cũ dùng chung 1 âm cho bật/tắt
-  installSound(WIFI_ON_PATH, WIFI_ON_ADP, WIFI_ON_ADP_LEN, WIFI_ON_ADP_CRC32);
-  installSound(WIFI_OFF_PATH, WIFI_OFF_ADP, WIFI_OFF_ADP_LEN, WIFI_OFF_ADP_CRC32);
+  installSound(WIFI_ON_PATH, WIFI_ON_ADP, WIFI_ON_ADP_LEN);
+  installSound(WIFI_OFF_PATH, WIFI_OFF_ADP, WIFI_OFF_ADP_LEN);
+  installSound(BOOT_PATH, BOOT_P16, BOOT_P16_LEN);
 }
 
 // Âm lượng theo cong bình phương (giống cảm nhận của tai), dạng Q16
@@ -219,7 +224,7 @@ void playerTask(void *) {
   File file;
   bool pcm = false;                // file đang phát: PCM 16-bit hay ADPCM
   uint32_t underrunsAtStart = 0, readMaxUs = 0;  // chẩn đoán: in ra khi phát xong âm phím
-  bool wifiSound = false;
+  float chime = 0;                 // âm báo nhúng (WiFi, mở nguồn): mức so với âm phím. 0 = âm phím
   Adpcm adpcm;
   DcBlock dc;
   uint32_t filePos = 0, fileTotal = 0;  // mẫu đã phát / tổng số mẫu của file
@@ -236,9 +241,9 @@ void playerTask(void *) {
     phase = 0;
   };
   auto fileGain = [&]() {
-    // tiếng ding WiFi nhỏ hơn âm phím nhưng luôn nghe được, kể cả khi âm lượng để thấp
+    // tiếng ding nhỏ hơn âm phím nhưng luôn nghe được, kể cả khi âm lượng để thấp
     uint8_t vol = volume;
-    return wifiSound ? (int32_t)(gainQ16(max<uint8_t>(vol, 40)) * WIFI_SOUND_GAIN) : gainQ16(vol);
+    return chime ? (int32_t)(gainQ16(max<uint8_t>(vol, 40)) * chime) : gainQ16(vol);
   };
   auto openSound = [&](const String &path, bool isPcm) {
     file = FFat.open(path, "r");
@@ -270,7 +275,7 @@ void playerTask(void *) {
       }
 
       if (file) file.close();
-      wifiSound = false;
+      chime = 0;
       playingKey = -1;
       note = nullptr;
       if (!idle) fadeOutLast();
@@ -287,10 +292,17 @@ void playerTask(void *) {
         underrunsAtStart = underruns;
         readMaxUs = 0;
         playingKey = cmd.key;
+      } else if (cmd.tone == TONE_BOOT) {  // ding mở nguồn, PCM 16-bit
+        chime = BOOT_SOUND_GAIN;
+        if (!openSound(BOOT_PATH, true)) {
+          chime = 0;
+          busy = false;
+          continue;
+        }
       } else if (cmd.tone == TONE_WIFI_ON || cmd.tone == TONE_WIFI_OFF) {  // nhạc báo bật / tắt WiFi
-        wifiSound = true;
+        chime = WIFI_SOUND_GAIN;
         if (!openSound(cmd.tone == TONE_WIFI_ON ? WIFI_ON_PATH : WIFI_OFF_PATH, false)) {
-          wifiSound = false;
+          chime = 0;
           busy = false;
           continue;
         }
@@ -365,7 +377,7 @@ void playerTask(void *) {
           log_i("Phim %d xong: hut du lieu %u lan, doc file lau nhat %u us", playingKey + 1,
                 underruns - underrunsAtStart, readMaxUs);
         file.close();
-        wifiSound = false;
+        chime = 0;
         playingKey = -1;
         busy = false;
         fadeOutLast();  // file bị cắt giữa chừng thì vẫn tắt êm

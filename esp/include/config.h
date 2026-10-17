@@ -23,6 +23,7 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 #define TONE_LEVEL       0.004f  // tiếng xác nhận chỉnh âm lượng, nhẹ hơn âm phím
 #define WIFI_TONE_LEVEL  0.00005f // âm báo WiFi cực nhẹ, tách biệt với âm lượng âm phím
 #define WIFI_SOUND_GAIN  0.3f    // tiếng ding WiFi so với âm phím (0,3 ≈ nhỏ hơn 10 dB). Quá nhỏ (vd 0,004) thì chỉ còn tiếng xì
+#define BOOT_SOUND_GAIN  0.5f    // tiếng ding mở nguồn so với âm phím (0,5 ≈ nhỏ hơn 6 dB)
 #define VOLUME_MAX_GAIN  0.7f   // mức to nhất (1 = hết thang số). Ampli tăng 9 dB (chân GAIN để trống) nên
                                 // trên ~0,7 đỉnh âm chạm điện áp pin -> méo. Đã thử 1,0: loa 0,8 W rè khi to.
                                 // Vẫn rè -> giảm tiếp (0,6); muốn to hơn thì đổi loa / gắn hộp, đừng tăng số này
@@ -50,6 +51,8 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 #define DEEP_SLEEP_IDLE_MS  (5 * 60 * 1000UL)
 #define BAT_CRITICAL_MV     3300  // dưới mức này: không phát, ngủ sâu
 #define BAT_MIN_VALID_MV    2500  // đọc dưới mức này là đo sai (chip không chạy nổi) -> bỏ qua
+#define BAT_CRITICAL_READS  3     // phải đo thấp chừng này lần liền (5s/lần) mới coi là pin cạn
+#define BAT_SETTLE_MS       20    // bật nguồn mạch đo pin rồi chờ chừng này mới đọc
 
 #ifndef ENABLE_SLEEP
 #define ENABLE_SLEEP 1

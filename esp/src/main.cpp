@@ -81,10 +81,16 @@ void setup() {
   if (batteryCritical()) deepSleep();  // pin cạn: ngủ tiếp, không kêu
 #endif
 
+  // Ding khi gạt công tắc mở nguồn / nhấn RST. Không kêu khi nhấn phím đánh thức khỏi ngủ sâu
+  // (phát luôn âm phím) hay khi sụt áp khởi động lại (kêu liên hồi nếu pin yếu)
+  esp_reset_reason_t why = esp_reset_reason();
+  if (why != ESP_RST_DEEPSLEEP && why != ESP_RST_BROWNOUT) audioTone(TONE_BOOT);
+
   keysBegin(wakeKeyMask());
   markActivity();
-  log_i("San sang. Pin %d mV (%d%%), am luong %d%%, ly do reset %d", batteryMv(), batteryPercent(),
-        audioVolume(), esp_reset_reason());
+  // millis(): bật công tắc bao lâu thì phím mới nhận (chưa tính thời gian bootloader, ~0,3s)
+  log_i("San sang sau %lu ms. Pin %d mV (%d%%), am luong %d%%, ly do reset %d", millis(), batteryMv(),
+        batteryPercent(), audioVolume(), esp_reset_reason());
 }
 
 void loop() {
