@@ -101,7 +101,7 @@ Nhấn 1 phím không có âm báo, chỉ phát âm của phím.
 ## 7. Web (React + Web Bluetooth, thư mục `web/`)
 
 - Chạy trên máy tính: `cd web && npm install && npm run dev` → mở `http://localhost:5173` bằng Chrome / Edge.
-- Điện thoại: Web Bluetooth chỉ chạy trên trang `https://` (hoặc `localhost`), nên phải đưa bản build (`npm run build` → `web/dist/`) lên host tĩnh có HTTPS (vd GitHub Pages). Android: Chrome. iPhone: Safari không có Web Bluetooth → dùng app Bluefy.
+- Điện thoại: Web Bluetooth chỉ chạy trên trang `https://` (hoặc `localhost`), nên phải đưa bản build (`npm run build` → `web/dist/`) lên host tĩnh có HTTPS. Hiện ở **https://soundpad.trananh.io.vn**: GitHub Pages lấy từ nhánh `gh-pages` (chỉ chứa bản build + file `CNAME`), build trên máy rồi đẩy lên nhánh đó. Android: Chrome. iPhone: Safari không có Web Bluetooth → dùng app Bluefy.
 - Bật Bluetooth trên board (`[1]+[4]`) → bấm Kết nối → chọn "SoundPad".
 - Chế độ phím: Đơn (4 ô chọn âm cho phím 1–4) / Ngẫu nhiên.
 - Danh sách âm: tên, độ dài, phím đang dùng, nút Phát thử / Đổi / Xoá. Nút "+ Thêm âm thanh" ở cuối (mp3, m4a, wav, hoặc video mp4 / mov).
