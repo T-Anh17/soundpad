@@ -11,4 +11,4 @@ void saveVolume();
 void onKeyPlay(uint8_t key);
 void onVolumeStep(int dir);  // +1 tăng, -1 giảm
 void onVolumeDone();         // nhả tổ hợp âm lượng
-void onWifiToggle();
+void onBleToggle();

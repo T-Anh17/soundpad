@@ -1,6 +1,6 @@
 # SoundPad — Plan
 
-4 phím cơ phát âm thanh từ kho 10 âm. Chế độ đơn: mỗi phím phát âm được gán; chế độ ngẫu nhiên: phím nào cũng phát 1 âm bất kỳ. Nạp âm, gán phím, chọn chế độ và chỉnh âm lượng qua web local. Chạy pin.
+4 phím cơ phát âm thanh từ kho âm không giới hạn số lượng (chỉ giới hạn bởi bộ nhớ). Chế độ đơn: mỗi phím phát âm được gán; chế độ ngẫu nhiên: phím nào cũng phát 1 âm bất kỳ. Nạp âm, gán phím, chọn chế độ và chỉnh âm lượng qua web (React) kết nối Bluetooth LE. Chạy pin.
 
 ## 1. Phần cứng
 
@@ -41,14 +41,16 @@ GPIO 18 ── MAX98357A SD             MAX98357A + / − ── loa
 | Nhấn lại phím đang phát | Phát lại từ đầu |
 | `[3]+[4]` | Tăng âm lượng; giữ → tăng liên tục; mỗi nấc bíp ở mức mới |
 | `[1]+[2]` | Giảm âm lượng; giữ → giảm liên tục; mỗi nấc bíp ở mức mới |
-| Giữ `[1]+[4]` ~1 giây | Bật/tắt WiFi (nhả sớm thì bỏ qua) |
+| Giữ `[1]+[4]` ~1 giây | Bật/tắt Bluetooth (nhả sớm thì bỏ qua) |
 | Tổ hợp khác | Bỏ qua |
 
-## 3. WiFi
+## 3. Bluetooth LE
 
-- Tên mạng "SoundPad", mật khẩu `123456788` (`AP_PASS` trong `esp/include/config.h`).
-- Mở máy: WiFi mặc định tắt. Bật/tắt bằng cách giữ `[1]+[4]` ~1 giây.
-- Không ai dùng web trong 2 phút → WiFi tự tắt.
+- Tên thiết bị "SoundPad" (`BLE_NAME` trong `esp/include/config.h`). Không còn WiFi.
+- Mở máy: Bluetooth mặc định tắt. Bật/tắt bằng cách giữ `[1]+[4]` ~1 giây (nghe chuông).
+- Bật mà không ai kết nối trong 2 phút → tự tắt. Trang web còn kết nối thì không tắt.
+- Giao thức (dịch vụ GATT, lệnh chữ + dữ liệu nạp âm): xem đầu `esp/src/ble.cpp`.
+- Sau khi đã bật Bluetooth một lần, chip không ngủ nhẹ nữa tới lần ngủ sâu kế tiếp (5 phút không dùng).
 
 ## 4. Pin và tiết kiệm điện
 
@@ -56,8 +58,8 @@ GPIO 18 ── MAX98357A SD             MAX98357A + / − ── loa
 2. Nhấn phím chỉ phát đúng âm của phím, không kèm âm báo nào.
 3. Pin < ~3,3 V → không phát, ngủ sâu (không kêu).
 4. Đang dùng: chip ngủ nhẹ, nhấn phím phát ngay.
-5. Không dùng 5 phút và WiFi tắt → ngủ sâu (không kêu). Ampli tắt bằng chân SD (<1 µA).
-6. Xung nhịp thấp (80 MHz), giảm công suất WiFi, giới hạn âm lượng tối đa, tắt mạch nguồn màn hình (GPIO15).
+5. Không dùng 5 phút và Bluetooth tắt → ngủ sâu (không kêu). Ampli tắt bằng chân SD (<1 µA).
+6. Xung nhịp thấp (80 MHz), giảm công suất phát Bluetooth (0 dBm), giới hạn âm lượng tối đa, tắt mạch nguồn màn hình (GPIO15).
 
 Thức dậy từ ngủ sâu:
 
@@ -65,7 +67,7 @@ Thức dậy từ ngủ sâu:
 |---|---|
 | Nhấn 1 phím | Dậy (~0,3–0,5 s) và phát âm của phím đó |
 | Giữ tổ hợp phím | Dậy và làm việc của tổ hợp (giữ tới khi nghe bíp) |
-| Giữ `[1]+[4]` ~1 giây | Dậy và bật WiFi |
+| Giữ `[1]+[4]` ~1 giây | Dậy và bật Bluetooth |
 | Gạt công tắc / nút RST | Khởi động lại |
 | Cắm USB | Không tự dậy, vẫn sạc. Đang thức mà cắm vào máy tính thì không ngủ nữa (giữ cổng COM) cho tới khi rút |
 | Ngủ vì pin cạn, nhấn phím | Dậy kiểm tra pin; còn yếu → ngủ lại, không kêu |
@@ -77,14 +79,14 @@ Thức dậy từ ngủ sâu:
 | Công tắc tắt | 0 | Không hao |
 | Bật, chờ / ngủ sâu | ~4–8 mA | ~3–4 ngày |
 | Đang phát | ~80–200 mA | ~2,5–6 giờ phát liên tục |
-| WiFi bật 2 phút | ~100–150 mA | ~1% pin mỗi lần |
+| Bluetooth bật (chip không ngủ) | ~25–40 mA | Ít hơn WiFi cũ (~100–150 mA) nhiều lần |
 
 ## 5. Âm báo (board tự tạo)
 
 | Sự kiện | Âm báo |
 |---|---|
-| Bật WiFi | Chuông báo sân bay, giây 1–5 (`esp/assets/wifi_chime.mp3` → `wifi_on.adp`, nhúng vào firmware) |
-| Tắt WiFi | Chuông báo sân bay, giây 9–13 (→ `wifi_off.adp`) |
+| Bật Bluetooth | Chuông báo sân bay, giây 1–5 (`esp/assets/wifi_chime.mp3` → `wifi_on.adp`, nhúng vào firmware; tên file từ thời WiFi) |
+| Tắt Bluetooth | Chuông báo sân bay, giây 9–13 (→ `wifi_off.adp`) |
 | Mở nguồn (gạt công tắc / RST) | Tiếng ding máy bay (`esp/assets/boot_ding.mp3` → `boot_ding.p16`, nâng 1 quãng tám lên ~984 Hz cho loa nhỏ) |
 | Đổi âm lượng | Bíp ở mức mới |
 
@@ -92,19 +94,22 @@ Nhấn 1 phím không có âm báo, chỉ phát âm của phím.
 
 ## 6. Lưu âm thanh
 
-- 10 ô âm (`/s1.p16` … `/s10.p16`). Phím gán ô nào và chế độ đơn / ngẫu nhiên lưu trong NVS. Bản cũ 4 phím: âm phím N nằm ở ô N, phím N mặc định phát ô N.
+- Không giới hạn số âm: âm số N là `/sN.p16` (N tới 9999), thêm được tới khi đầy bộ nhớ. Tên các âm lưu chung trong `/names.txt` (bản 10 ô cũ lưu tên trong NVS, tự chuyển sang khi khởi động lần đầu). Phím gán âm nào và chế độ đơn / ngẫu nhiên lưu trong NVS. Phím N mặc định phát âm số N.
 - Lưu trong flash 16 MB, phân vùng FFat ~12,8 MB. Âm lưu PCM 16-bit, 22321 Hz mono (~44 KB/giây) → ~4,8 phút tổng cộng. Không nén ADPCM 4-bit nữa: giọng nói bị "sạn" (SNR ~24 dB), rè ở mọi mức âm lượng. Âm phím bản cũ (`/sN.adp`) vẫn phát được tới khi nạp lại.
 - Mất điện vẫn nhớ âm thanh và âm lượng.
 
-## 7. Web local
+## 7. Web (React + Web Bluetooth, thư mục `web/`)
 
-- Bật WiFi → điện thoại vào WiFi "SoundPad" (mật khẩu ở mục 3) → trang cài đặt tự bật lên (captive portal; board ở địa chỉ 4.3.2.1 và báo DNS = 4.3.2.1 qua DHCP. Dùng 192.168.4.1 thì Samsung coi là mạng không có internet, không bật trang). Nếu không tự bật, hoặc nút Nạp không mở được file trong cửa sổ tự bật: mở Chrome / Safari vào `4.3.2.1`.
+- Chạy trên máy tính: `cd web && npm install && npm run dev` → mở `http://localhost:5173` bằng Chrome / Edge.
+- Điện thoại: Web Bluetooth chỉ chạy trên trang `https://` (hoặc `localhost`), nên phải đưa bản build (`npm run build` → `web/dist/`) lên host tĩnh có HTTPS (vd GitHub Pages). Android: Chrome. iPhone: Safari không có Web Bluetooth → dùng app Bluefy.
+- Bật Bluetooth trên board (`[1]+[4]`) → bấm Kết nối → chọn "SoundPad".
 - Chế độ phím: Đơn (4 ô chọn âm cho phím 1–4) / Ngẫu nhiên.
-- 10 ô âm: tên, độ dài, phím đang dùng, nút Phát thử / Nạp hoặc Đổi (mp3, m4a, wav, hoặc video mp4 / mov) / Xoá.
-- Chọn file xong hiện hộp chọn đoạn: sóng âm, kéo hai đầu hoặc gõ giây Từ / Đến, nghe thử trên điện thoại rồi mới lưu.
+- Danh sách âm: tên, độ dài, phím đang dùng, nút Phát thử / Đổi / Xoá. Nút "+ Thêm âm thanh" ở cuối (mp3, m4a, wav, hoặc video mp4 / mov).
+- Chọn file xong hiện hộp chọn đoạn: sóng âm, kéo thanh Từ / Đến, nghe thử trên điện thoại rồi mới lưu.
+- Nạp qua BLE chậm hơn WiFi: ~20–50 KB/giây, tức 10 giây âm (~440 KB) mất khoảng 10–20 giây. Web hiện % và thời gian còn lại.
 - Trình duyệt tự tách âm thanh khỏi video, đổi định dạng, cắt khoảng lặng, lọc trầm dưới 700 Hz, chỉnh âm cho rõ giọng, nén động nhẹ, chuẩn hoá âm lượng rồi gửi lên dạng PCM 16-bit. Firmware lọc tiếp mọi âm dưới 1,2 kHz (`SPEAKER_HPF_HZ`) trước khi ra loa: loa nhỏ không phát nổi dải dưới, chỉ ra tiếng rè.
 - Thanh âm lượng (đồng bộ với âm lượng chỉnh bằng phím).
-- Ô âm đang phát sáng viền. Hiện bộ nhớ còn trống và % pin.
+- Âm đang phát sáng viền. Hiện bộ nhớ còn trống và % pin.
 
 ## 8. Thư mục và thứ tự làm
 
@@ -112,10 +117,10 @@ Nhấn 1 phím không có âm báo, chỉ phát âm của phím.
 soundpad/
 ├── esp/    firmware (PlatformIO, Arduino core 3.x)
 ├── docs/   sơ đồ nối dây (wiring.html)
-└── web/    giao diện web
+└── web/    giao diện web (React + Vite, Web Bluetooth)
 ```
 
-1. [x] Giao diện web + server giả lập để xem trên máy tính
-2. [x] Firmware: phím, âm thanh, WiFi, pin, chế độ ngủ (PlatformIO, đã build; chưa test trên board)
+1. [x] Giao diện web (bản đầu: HTML + server giả lập; nay: React + Web Bluetooth)
+2. [x] Firmware: phím, âm thanh, WiFi → Bluetooth LE, pin, chế độ ngủ (PlatformIO, đã build; chưa test trên board)
 3. [ ] Ghép web vào firmware, nạp board, test thật, đo dòng
 4. [x] Sơ đồ nối dây chi tiết có hình → `docs/wiring.html`

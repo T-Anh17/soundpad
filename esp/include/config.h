@@ -4,7 +4,7 @@
 // ---------------- Chân ----------------
 static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], chân còn lại -> GND
 #define KEY_COUNT 4
-#define SOUND_COUNT 10  // số ô âm thanh lưu được (chế độ đơn: mỗi phím gán 1 ô; ngẫu nhiên: phát bất kỳ ô nào)
+#define SOUND_ID_MAX 9999  // số hiệu âm lớn nhất (/s9999.p16). Số âm thật ra chỉ giới hạn bởi bộ nhớ trống
 
 // Ampli số MAX98357A (I2S). VIN -> (+) pin sau công tắc, GND -> (−) pin. Xem PLAN.md
 #define AUDIO_DIN_PIN  11   // -> DIN
@@ -26,8 +26,7 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
                                // xuống (vd 300–500)
 #define VOLUME_STEP      5      // % mỗi nấc khi chỉnh bằng phím
 #define TONE_LEVEL       0.3f    // tiếng bíp chỉnh âm lượng so với âm phím (0,004 cũ ≈ −57 dBFS: không nghe thấy)
-#define WIFI_TONE_LEVEL  0.00005f // âm báo WiFi cực nhẹ, tách biệt với âm lượng âm phím
-#define WIFI_SOUND_GAIN  0.3f    // tiếng ding WiFi so với âm phím (0,3 ≈ nhỏ hơn 10 dB). Quá nhỏ (vd 0,004) thì chỉ còn tiếng xì
+#define BLE_SOUND_GAIN   0.3f    // chuông bật/tắt Bluetooth so với âm phím (0,3 ≈ nhỏ hơn 10 dB). Quá nhỏ (vd 0,004) thì chỉ còn tiếng xì
 #define BOOT_SOUND_GAIN  1.0f    // tiếng ding mở nguồn so với âm phím (ding ~984 Hz dưới SPEAKER_HPF_HZ, bị lọc bớt ~7 dB)
 #define VOLUME_MAX_GAIN  1.0f   // mức to nhất (1 = hết thang số). Từng hạ còn 0,7 vì rè, nhưng rè thật ra do
                                 // I2S 22 kHz (ampli không nhận) và dải trầm loa không phát nổi, đã sửa bằng
@@ -45,12 +44,11 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 #define COMBO_CONFIRM_MS        150  // 2 phím nhấn lệch nhau: giữ cả hai chừng này mới là tổ hợp
 #define VOLUME_REPEAT_DELAY_MS  400  // giữ tổ hợp bao lâu thì bắt đầu đổi liên tục
 #define VOLUME_REPEAT_MS        250
-#define WIFI_HOLD_MS            1000 // giữ [1]+[4] bao lâu thì bật/tắt WiFi
+#define BLE_HOLD_MS             1000 // giữ [1]+[4] bao lâu thì bật/tắt Bluetooth
 
-// ---------------- WiFi ----------------
-#define AP_SSID           "SoundPad"
-#define AP_PASS           "123456788"  // ít nhất 8 ký tự. Trống = mạng mở
-#define WIFI_IDLE_OFF_MS  (2 * 60 * 1000UL)
+// ---------------- Bluetooth LE ----------------
+#define BLE_NAME          "SoundPad"
+#define BLE_IDLE_OFF_MS   (2 * 60 * 1000UL)  // bật mà không ai kết nối chừng này thì tự tắt
 
 // ---------------- Pin & ngủ ----------------
 #define DEEP_SLEEP_IDLE_MS  (5 * 60 * 1000UL)

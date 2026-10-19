@@ -81,7 +81,7 @@ int batteryPercent() {
   return 0;
 }
 
-// Một lần đo thấp chưa chắc pin cạn (đo sai, vừa phát to, vừa bật WiFi): phải thấp nhiều lần liền
+// Một lần đo thấp chưa chắc pin cạn (đo sai, vừa phát to, vừa bật Bluetooth): phải thấp nhiều lần liền
 bool batteryCritical() { return lowReads >= BAT_CRITICAL_READS; }
 
 uint32_t wakeKeyMask() {

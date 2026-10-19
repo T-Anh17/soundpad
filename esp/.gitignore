@@ -5,5 +5,4 @@
 .vscode/ipch
 
 # Sinh lại mỗi lần build (scripts/embed_*.py)
-include/web_page.h
 include/wifi_sound.h

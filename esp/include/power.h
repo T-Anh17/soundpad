@@ -2,7 +2,7 @@
 #include <Arduino.h>
 
 void powerBegin();                 // tắt nguồn màn hình, đọc pin lần đầu
-void powerUpdate(bool skip);  // đo pin định kỳ; skip: đang phát (áp bị sụt) hoặc WiFi bật (đo sai)
+void powerUpdate(bool skip);  // đo pin định kỳ; skip: đang phát (áp bị sụt) hoặc Bluetooth bật (đo sai)
 
 int  batteryMv();
 int  batteryPercent();

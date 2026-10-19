@@ -4,7 +4,7 @@
 //   không có     -> phát âm của phím đó
 //   [1]+[2]      -> giảm âm lượng (giữ: giảm liên tục)
 //   [3]+[4]      -> tăng âm lượng (giữ: tăng liên tục)
-//   [1]+[4]      -> giữ WIFI_HOLD_MS thì bật/tắt WiFi (nhả sớm: bỏ qua)
+//   [1]+[4]      -> giữ BLE_HOLD_MS thì bật/tắt Bluetooth (nhả sớm: bỏ qua)
 //   tổ hợp khác  -> bỏ qua
 //
 // Hai phím xuống lệch nhau hơn COMBO_WINDOW_MS (phím đầu đã phát): phím sau chưa phát vội.
@@ -18,7 +18,7 @@
 
 namespace {
 
-enum Combo : uint8_t { NONE, VOL_DOWN, VOL_UP, WIFI };
+enum Combo : uint8_t { NONE, VOL_DOWN, VOL_UP, BLE };
 
 bool down[KEY_COUNT];          // trạng thái đã chống dội
 uint32_t changedAt[KEY_COUNT];
@@ -31,14 +31,14 @@ uint32_t lateAt;
 
 Combo combo = NONE;            // tổ hợp đang giữ
 uint8_t comboA, comboB;
-uint32_t nextRepeat;           // âm lượng: lần đổi tiếp theo. WiFi: lúc giữ đủ lâu
-bool wifiDone;                 // đã bật/tắt WiFi trong lần giữ này
+uint32_t nextRepeat;           // âm lượng: lần đổi tiếp theo. Bluetooth: lúc giữ đủ lâu
+bool bleDone;                  // đã bật/tắt Bluetooth trong lần giữ này
 
 Combo comboOf(uint8_t a, uint8_t b) {
   if (a > b) std::swap(a, b);
   if (a == 0 && b == 1) return VOL_DOWN;
   if (a == 2 && b == 3) return VOL_UP;
-  if (a == 0 && b == 3) return WIFI;
+  if (a == 0 && b == 3) return BLE;
   return NONE;
 }
 
@@ -48,9 +48,9 @@ void startCombo(Combo c, uint8_t a, uint8_t b, uint32_t held, uint32_t now) {
   combo = c;
   comboA = a;
   comboB = b;
-  if (c == WIFI) {
-    wifiDone = false;
-    nextRepeat = held + WIFI_HOLD_MS;
+  if (c == BLE) {
+    bleDone = false;
+    nextRepeat = held + BLE_HOLD_MS;
     return;
   }
   onVolumeStep(c == VOL_UP ? 1 : -1);
@@ -130,12 +130,12 @@ void keysUpdate() {
 
   if (combo != NONE) {
     bool held = down[comboA] && down[comboB];
-    if (combo == WIFI) {
+    if (combo == BLE) {
       if (!held) {
         combo = NONE;
-      } else if (!wifiDone && (int32_t)(now - nextRepeat) >= 0) {
-        wifiDone = true;  // giữ tiếp không bật/tắt lại, phải nhả ra rồi giữ lần nữa
-        onWifiToggle();
+      } else if (!bleDone && (int32_t)(now - nextRepeat) >= 0) {
+        bleDone = true;  // giữ tiếp không bật/tắt lại, phải nhả ra rồi giữ lần nữa
+        onBleToggle();
       }
     } else if (!held) {
       onVolumeDone();

@@ -1,7 +1,7 @@
 // Phát âm thanh qua I2S chuẩn (Philips, 16-bit mono) tới ampli số MAX98357A.
-// I2S chạy bằng DMA nên không tốn CPU và không bị giật khi WiFi bận.
+// I2S chạy bằng DMA nên không tốn CPU và không bị giật khi Bluetooth bận.
 //
-// Âm phím lưu PCM 16-bit little-endian (/sN.p16, web xử lý sẵn trước khi gửi). Âm WiFi nhúng
+// Âm phím lưu PCM 16-bit little-endian (/sN.p16, web xử lý sẵn trước khi gửi). Chuông Bluetooth nhúng
 // trong firmware và âm phím bản cũ (/sN.adp) là IMA ADPCM 4-bit: 1 byte = 2 mẫu, nibble thấp
 // trước, trạng thái bắt đầu từ 0. ADPCM nhẹ hơn 4 lần nhưng giọng nói bị "sạn" (SNR ~24 dB).
 //
@@ -24,7 +24,7 @@
 
 namespace {
 
-enum : int8_t {   // Cmd.key < 0
+enum : int16_t {  // Cmd.key < 0
   CMD_TONE = -1,
   CMD_STOP = -2,
   CMD_OFF  = -3,  // hạ mức, tắt I2S
@@ -32,7 +32,7 @@ enum : int8_t {   // Cmd.key < 0
 };
 
 struct Cmd {
-  int8_t key;     // >=0: phát ô âm, <0: CMD_*
+  int16_t key;    // >=0: phát âm số key, <0: CMD_*
   uint8_t tone;   // Tone khi key = CMD_TONE
 };
 
@@ -41,7 +41,7 @@ struct Note {
   uint16_t ms;    // 0 = hết chuỗi
 };
 
-// Tiếng mở WiFi kiểu giọt rơi: rất ngắn, cao độ trượt xuống và tắt dần.
+// (không dùng nữa, chuông là file) Tiếng mở kiểu giọt rơi: rất ngắn, cao độ trượt xuống và tắt dần.
 const Note T_WIFI_ON[]  = {{1100, 48}, {0, 0}};
 const Note T_WIFI_OFF[] = {{660, 62}, {0, 0}};
 const Note T_VOLUME[]   = {{0, 36}, {0, 0}};  // tần số được chọn theo mức âm lượng hiện tại
@@ -173,7 +173,7 @@ bool IRAM_ATTR onUnderrun(i2s_chan_handle_t, i2s_event_data_t *, void *) {
   return false;
 }
 
-volatile int8_t playingSound = -1;
+volatile int16_t playingSound = -1;
 volatile bool busy = false;
 volatile bool idle = true;
 volatile uint8_t volume = VOLUME_DEFAULT;
@@ -306,7 +306,7 @@ void playerTask(void *) {
   File file;
   bool pcm = false;                // file đang phát: PCM 16-bit hay ADPCM
   uint32_t underrunsAtStart = 0, readMaxUs = 0;  // chẩn đoán: in ra khi phát xong âm phím
-  float chime = 0;                 // âm báo nhúng (WiFi, mở nguồn): mức so với âm phím. 0 = âm phím
+  float chime = 0;                 // âm báo nhúng (Bluetooth, mở nguồn): mức so với âm phím. 0 = âm phím
   Adpcm adpcm;
   DcBlock dc;
   uint32_t filePos = 0, fileTotal = 0;  // mẫu đã phát / tổng số mẫu của file
@@ -381,9 +381,9 @@ void playerTask(void *) {
           busy = false;
           continue;
         }
-      } else if (cmd.tone == TONE_WIFI_ON || cmd.tone == TONE_WIFI_OFF) {  // nhạc báo bật / tắt WiFi
-        chime = WIFI_SOUND_GAIN;
-        if (!openSound(cmd.tone == TONE_WIFI_ON ? WIFI_ON_PATH : WIFI_OFF_PATH, false)) {
+      } else if (cmd.tone == TONE_BLE_ON || cmd.tone == TONE_BLE_OFF) {  // chuông bật / tắt Bluetooth
+        chime = BLE_SOUND_GAIN;
+        if (!openSound(cmd.tone == TONE_BLE_ON ? WIFI_ON_PATH : WIFI_OFF_PATH, false)) {
           chime = 0;
           busy = false;
           continue;
@@ -395,14 +395,14 @@ void playerTask(void *) {
         // các âm báo khác luôn nghe được
         uint8_t vol = volume;
         uint8_t v = cmd.tone == TONE_VOLUME ? max<uint8_t>(vol, 10) : max<uint8_t>(vol, 40);
-        float level = cmd.tone == TONE_VOLUME ? TONE_LEVEL : WIFI_TONE_LEVEL;
+        float level = TONE_LEVEL;
         toneAmp = 32767 * level * gainQ16(v) / 65536;
         if (cmd.tone == TONE_TEST_SOFT || cmd.tone == TONE_TEST_LOUD)
           toneAmp = 32767 * (cmd.tone == TONE_TEST_SOFT ? TEST_SOFT_LEVEL : TEST_LOUD_LEVEL);
         // bíp âm lượng 1400–1800 Hz: trên SPEAKER_HPF_HZ, dải loa nhỏ phát sạch
         toneFrequency = cmd.tone == TONE_VOLUME ? 1400 + (uint16_t)vol * 4
-                       : cmd.tone == TONE_WIFI_ON ? 1100 : 0;
-        glideEndFrequency = cmd.tone == TONE_WIFI_ON ? 740 : 0;
+                       : 0;
+        glideEndFrequency = 0;
       } else {
         busy = false;
         continue;
@@ -489,15 +489,15 @@ void playerTask(void *) {
   }
 }
 
-void send(int8_t key, Tone t) {
+void send(int16_t key, Tone t) {
   Cmd c{key, (uint8_t)t};
   xQueueOverwrite(queue, &c);
 }
 
 }  // namespace
 
-String soundPath(uint8_t slot) { return "/s" + String(slot + 1) + ".p16"; }
-String legacySoundPath(uint8_t slot) { return "/s" + String(slot + 1) + ".adp"; }
+String soundPath(int id) { return "/s" + String(id + 1) + ".p16"; }
+String legacySoundPath(int id) { return "/s" + String(id + 1) + ".adp"; }
 
 void audioBegin() {
   installWifiSounds();
@@ -540,7 +540,7 @@ void audioBegin() {
   xTaskCreatePinnedToCore(playerTask, "player", 4096, nullptr, 5, nullptr, 1);
 }
 
-void audioPlaySound(uint8_t slot) { send(slot, TONE_NONE); }
+void audioPlaySound(int id) { send(id, TONE_NONE); }
 void audioTone(Tone t) { send(CMD_TONE, t); }
 
 void audioStop() {
