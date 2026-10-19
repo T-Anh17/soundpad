@@ -65,6 +65,13 @@ void onBleToggle() {
   }
 }
 
+void onModeToggle() {
+  markActivity();
+  setRandomMode(!randomMode());
+  audioTone(randomMode() ? TONE_MODE_RANDOM : TONE_MODE_FIXED);
+  log_i("Che do %s (3 phim)", randomMode() ? "ngau nhien" : "don");
+}
+
 // ---------- Main ----------
 
 void setup() {

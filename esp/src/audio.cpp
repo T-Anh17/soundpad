@@ -50,7 +50,11 @@ const Note T_VOLUME[]   = {{0, 36}, {0, 0}};  // tần số được chọn theo
 const Note T_TEST[] = {{400, 1000}, {0, 400}, {700, 1000}, {0, 400}, {1000, 1000}, {0, 400},
                        {1500, 1000}, {0, 400}, {2500, 1000}, {0, 400}, {4000, 1000}, {0, 0}};
 const float TEST_SOFT_LEVEL = 0.1f, TEST_LOUD_LEVEL = 0.4f;  // so với hết thang số
-const Note *const TONES[] = {nullptr, T_WIFI_ON, T_WIFI_OFF, T_VOLUME, nullptr, T_TEST, T_TEST};
+// Đổi chế độ bằng 3 phím: đơn = 1 bíp dài, ngẫu nhiên = 3 bíp ngắn đi lên (trên SPEAKER_HPF_HZ)
+const Note T_MODE_FIXED[]  = {{1600, 220}, {0, 0}};
+const Note T_MODE_RANDOM[] = {{1500, 70}, {0, 50}, {1900, 70}, {0, 50}, {2400, 90}, {0, 0}};
+const Note *const TONES[] = {nullptr, T_WIFI_ON, T_WIFI_OFF, T_VOLUME, nullptr, T_TEST, T_TEST,
+                             T_MODE_FIXED, T_MODE_RANDOM};
 
 const int16_t IMA_STEP[89] = {
   7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88,

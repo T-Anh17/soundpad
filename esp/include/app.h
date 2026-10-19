@@ -12,3 +12,4 @@ void onKeyPlay(uint8_t key);
 void onVolumeStep(int dir);  // +1 tăng, -1 giảm
 void onVolumeDone();         // nhả tổ hợp âm lượng
 void onBleToggle();
+void onModeToggle();          // 3 phím cùng lúc: đơn <-> ngẫu nhiên

@@ -45,6 +45,7 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 #define VOLUME_REPEAT_DELAY_MS  400  // giữ tổ hợp bao lâu thì bắt đầu đổi liên tục
 #define VOLUME_REPEAT_MS        250
 #define BLE_HOLD_MS             1000 // giữ [1]+[4] bao lâu thì bật/tắt Bluetooth
+#define TRIPLE_WINDOW_MS        80   // có 2 phím rồi: chờ phím thứ 3 chừng này mới làm việc của tổ hợp 2 phím
 
 // ---------------- Bluetooth LE ----------------
 #define BLE_NAME          "SoundPad"

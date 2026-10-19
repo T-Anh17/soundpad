@@ -42,6 +42,7 @@ GPIO 18 ── MAX98357A SD             MAX98357A + / − ── loa
 | `[3]+[4]` | Tăng âm lượng; giữ → tăng liên tục; mỗi nấc bíp ở mức mới |
 | `[1]+[2]` | Giảm âm lượng; giữ → giảm liên tục; mỗi nấc bíp ở mức mới |
 | Giữ `[1]+[4]` ~1 giây | Bật/tắt Bluetooth (nhả sớm thì bỏ qua) |
+| Nhấn 3 phím bất kỳ cùng lúc | Đổi chế độ đơn ↔ ngẫu nhiên (lưu lại khi mất điện). Đơn: 1 bíp dài; ngẫu nhiên: 3 bíp ngắn đi lên |
 | Tổ hợp khác | Bỏ qua |
 
 ## 3. Bluetooth LE
