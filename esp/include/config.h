@@ -16,15 +16,19 @@ static const uint8_t KEY_PINS[] = {1, 2, 3, 10};  // phím [1] [2] [3] [4], châ
 #define LCD_BL_PIN     38   // đèn nền màn hình -> giữ LOW
 
 // ---------------- Âm thanh ----------------
-// Phải trùng RATE trong web/index.html. 22321 = 160 MHz / 7168: MCLK = 256 x tần số mẫu
-// = 160 MHz / 28 chia chẵn (xung I2S đều). Đổi số này thì các âm đã lưu phát sai cao độ
+// Tần số mẫu của âm lưu và xử lý. Phải trùng RATE trong web/index.html. Ra I2S thì nhân đôi
+// (44642 Hz, MAX98357A không nhận 22 kHz, xem audio.cpp): MCLK = 256 x 44642 = 160 MHz / 14
+// chia chẵn (xung I2S đều). Đổi số này thì các âm đã lưu phát sai cao độ
 #define SAMPLE_RATE      22321
 #define VOLUME_DEFAULT   70     // %
+#define SPEAKER_HPF_HZ   1200   // bỏ mọi âm dưới mức này trước khi ra loa (loa nhỏ không phát nổi, chỉ ra
+                               // tiếng rè, xem audio.cpp). 1000 vẫn còn hơi rè. Đổi loa lớn hơn thì hạ
+                               // xuống (vd 300–500)
 #define VOLUME_STEP      5      // % mỗi nấc khi chỉnh bằng phím
-#define TONE_LEVEL       0.004f  // tiếng xác nhận chỉnh âm lượng, nhẹ hơn âm phím
+#define TONE_LEVEL       0.3f    // tiếng bíp chỉnh âm lượng so với âm phím (0,004 cũ ≈ −57 dBFS: không nghe thấy)
 #define WIFI_TONE_LEVEL  0.00005f // âm báo WiFi cực nhẹ, tách biệt với âm lượng âm phím
 #define WIFI_SOUND_GAIN  0.3f    // tiếng ding WiFi so với âm phím (0,3 ≈ nhỏ hơn 10 dB). Quá nhỏ (vd 0,004) thì chỉ còn tiếng xì
-#define BOOT_SOUND_GAIN  0.5f    // tiếng ding mở nguồn so với âm phím (0,5 ≈ nhỏ hơn 6 dB)
+#define BOOT_SOUND_GAIN  1.0f    // tiếng ding mở nguồn so với âm phím (ding ~984 Hz dưới SPEAKER_HPF_HZ, bị lọc bớt ~7 dB)
 #define VOLUME_MAX_GAIN  0.7f   // mức to nhất (1 = hết thang số). Ampli tăng 9 dB (chân GAIN để trống) nên
                                 // trên ~0,7 đỉnh âm chạm điện áp pin -> méo. Đã thử 1,0: loa 0,8 W rè khi to.
                                 // Vẫn rè -> giảm tiếp (0,6); muốn to hơn thì đổi loa / gắn hộp, đừng tăng số này

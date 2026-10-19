@@ -45,7 +45,12 @@ struct Note {
 const Note T_WIFI_ON[]  = {{1100, 48}, {0, 0}};
 const Note T_WIFI_OFF[] = {{660, 62}, {0, 0}};
 const Note T_VOLUME[]   = {{0, 36}, {0, 0}};  // tần số được chọn theo mức âm lượng hiện tại
-const Note *const TONES[] = {nullptr, T_WIFI_ON, T_WIFI_OFF, T_VOLUME};
+// Đo méo: mỗi tông 1 giây, cách 0,4 giây, mức cố định không theo âm lượng. Ghi âm lại rồi so
+// độ méo theo tần số: méo giảm mạnh ở tần số cao là do loa (màng rung quá biên), không đổi là do mạch
+const Note T_TEST[] = {{400, 1000}, {0, 400}, {700, 1000}, {0, 400}, {1000, 1000}, {0, 400},
+                       {1500, 1000}, {0, 400}, {2500, 1000}, {0, 400}, {4000, 1000}, {0, 0}};
+const float TEST_SOFT_LEVEL = 0.1f, TEST_LOUD_LEVEL = 0.4f;  // so với hết thang số
+const Note *const TONES[] = {nullptr, T_WIFI_ON, T_WIFI_OFF, T_VOLUME, nullptr, T_TEST, T_TEST};
 
 const int16_t IMA_STEP[89] = {
   7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88,
@@ -83,12 +88,71 @@ struct DcBlock {
   }
 };
 
-// MCLK = 256 * SAMPLE_RATE (BCLK = MCLK / 8). Phần lẻ của 160 MHz / MCLK phải nhỏ hơn 1/126
+// MAX98357A CHỈ nhận LRCLK 8 / 16 / 32–48 / 88,2–96 kHz (datasheet: "22.05kHz and 24kHz are NOT
+// supported", dải 3 là 30,4–50,4 kHz). Chạy I2S thẳng ở SAMPLE_RATE (22321 Hz) thì ampli dò
+// sai xung -> rè ở mọi mức âm lượng, với loa nào cũng vậy. Nên I2S chạy gấp đôi (44642 Hz),
+// mọi xử lý vẫn ở SAMPLE_RATE và chỉ nhân đôi số mẫu ở bước cuối (upsample, xem writeLevels)
+const uint32_t I2S_RATE = SAMPLE_RATE * 2;
+static_assert(I2S_RATE >= 30400 && I2S_RATE <= 50400, "MAX98357A khong nhan LRCLK nay");
+
+// MCLK = 256 * I2S_RATE (BCLK = MCLK / 8). Phần lẻ của 160 MHz / MCLK phải nhỏ hơn 1/126
 // để driver chọn bộ chia nguyên (xung đều, không rung pha)
-const uint32_t I2S_MCLK = SAMPLE_RATE * 256;
+const uint32_t I2S_MCLK = I2S_RATE * 256;
 static_assert(160000000UL % I2S_MCLK * 126 < I2S_MCLK, "SAMPLE_RATE khong cho bo chia xung nguyen");
 
-const size_t CHUNK = 256;                       // mẫu mỗi lần ghi
+// Bộ nhân đôi mẫu: mỗi mẫu vào ra 2 mẫu, mẫu chẵn là mẫu gốc (trễ UP_TAPS / 2), mẫu lẻ là giá
+// trị nửa mẫu sau nội suy bằng sinc cửa sổ Kaiser (lọc nửa băng 63 hệ số). Chèn mẫu thô
+// (lặp lại / chèn 0) thì sinh ảnh tần 11–22 kHz nghe như tiếng xì rè, bộ lọc của ampli ở
+// 44,6 kHz cắt từ ~21 kHz nên không chặn được
+const int UP_TAPS = 32;
+float upCoef[UP_TAPS];
+int16_t upHist[UP_TAPS * 2];  // lịch sử chép đôi để đọc liền một dải, không cần vòng modulo
+int upPos = 0;
+
+void upsampleInit() {
+  auto i0 = [](float x) {  // hàm Bessel I0 cho cửa sổ Kaiser
+    float sum = 1, term = 1;
+    for (int k = 1; k < 25; k++) {
+      term *= (x / (2 * k)) * (x / (2 * k));
+      sum += term;
+    }
+    return sum;
+  };
+  const float beta = 7.0f;  // ~70 dB chặn ảnh tần
+  float total = 0;
+  for (int j = 0; j < UP_TAPS; j++) {
+    float t = j - (UP_TAPS - 1) / 2.0f;  // ±0,5 … ±15,5 mẫu tính từ điểm nội suy
+    float r = t / (UP_TAPS / 2.0f);
+    upCoef[j] = sinf(PI * t) / (PI * t) * i0(beta * sqrtf(1 - r * r)) / i0(beta);
+    total += upCoef[j];
+  }
+  for (float &c : upCoef) c /= total;  // tín hiệu chậm đi qua giữ nguyên mức
+}
+
+// Lọc thông cao Butterworth bậc 4 (2 tầng biquad) ở SPEAKER_HPF_HZ cho mọi âm ra loa. Đo bằng
+// chuỗi tông thử (loa nhỏ trong hộp kín, ghi âm bằng điện thoại): 400 Hz méo 84% (phát to thì hài
+// còn to hơn tông gốc), 700 Hz 18%, 1 kHz 6–10%, từ 1,5 kHz chỉ 1–2% -> mạch sạch, phần dưới
+// ~1 kHz màng loa rung quá biên, chỉ ra tiếng rè. Web lọc dưới 700 Hz là chưa đủ
+struct Biquad {
+  float b0, b1, b2, a1, a2;
+  float z1 = 0, z2 = 0;
+  void highPass(float fc, float q) {
+    float w = 2 * PI * fc / SAMPLE_RATE, cw = cosf(w), al = sinf(w) / (2 * q), a0 = 1 + al;
+    b0 = b2 = (1 + cw) / 2 / a0;
+    b1 = -(1 + cw) / a0;
+    a1 = -2 * cw / a0;
+    a2 = (1 - al) / a0;
+  }
+  float next(float x) {  // dạng chuyển vị II
+    float y = b0 * x + z1;
+    z1 = b1 * x - a1 * y + z2;
+    z2 = b2 * x - a2 * y;
+    return y;
+  }
+};
+Biquad hpf[2];
+
+const size_t CHUNK = 256;                       // mẫu mỗi lần ghi (ở SAMPLE_RATE)
 const uint32_t FADE_IN = SAMPLE_RATE * 3 / 1000;
 const uint32_t FADE_OUT = SAMPLE_RATE * 6 / 1000;
 const char *const WIFI_ON_PATH = "/wifi_on.adp";
@@ -159,9 +223,27 @@ int32_t gainQ16(uint8_t v) {
   return (int32_t)(g * g * VOLUME_MAX_GAIN * 65536);
 }
 
+// Lọc thông cao (xem Biquad) rồi ghi n mẫu SAMPLE_RATE ra I2S thành 2n mẫu I2S_RATE (xem
+// upsampleInit). Mọi đường ra loa, kể cả im lặng, đều qua đây để bộ lọc không bị gián đoạn
 void writeLevels(const int16_t *s, size_t n) {
-  size_t written;
-  i2s_channel_write(tx, s, n * sizeof(int16_t), &written, portMAX_DELAY);
+  static int16_t out[CHUNK * 2];
+  while (n) {
+    size_t m = min(n, CHUNK);
+    for (size_t i = 0; i < m; i++) {
+      float v = hpf[1].next(hpf[0].next(s[i]));
+      upPos = (upPos + UP_TAPS - 1) % UP_TAPS;
+      upHist[upPos] = upHist[upPos + UP_TAPS] = (int16_t)constrain(lrintf(v), -32768L, 32767L);
+      const int16_t *x = upHist + upPos;  // x[j] = mẫu cách đây j mẫu
+      float acc = 0;
+      for (int j = 0; j < UP_TAPS; j++) acc += upCoef[j] * x[j];
+      out[2 * i] = x[UP_TAPS / 2];
+      out[2 * i + 1] = (int16_t)constrain(lrintf(acc), -32768L, 32767L);
+    }
+    size_t written;
+    i2s_channel_write(tx, out, m * 2 * sizeof(int16_t), &written, portMAX_DELAY);
+    s += m;
+    n -= m;
+  }
 }
 
 void writeSignal(int16_t *s, size_t n) {
@@ -315,7 +397,10 @@ void playerTask(void *) {
         uint8_t v = cmd.tone == TONE_VOLUME ? max<uint8_t>(vol, 10) : max<uint8_t>(vol, 40);
         float level = cmd.tone == TONE_VOLUME ? TONE_LEVEL : WIFI_TONE_LEVEL;
         toneAmp = 32767 * level * gainQ16(v) / 65536;
-        toneFrequency = cmd.tone == TONE_VOLUME ? 520 + (uint16_t)vol * 3
+        if (cmd.tone == TONE_TEST_SOFT || cmd.tone == TONE_TEST_LOUD)
+          toneAmp = 32767 * (cmd.tone == TONE_TEST_SOFT ? TEST_SOFT_LEVEL : TEST_LOUD_LEVEL);
+        // bíp âm lượng 1400–1800 Hz: trên SPEAKER_HPF_HZ, dải loa nhỏ phát sạch
+        toneFrequency = cmd.tone == TONE_VOLUME ? 1400 + (uint16_t)vol * 4
                        : cmd.tone == TONE_WIFI_ON ? 1100 : 0;
         glideEndFrequency = cmd.tone == TONE_WIFI_ON ? 740 : 0;
       } else {
@@ -416,6 +501,9 @@ String legacySoundPath(uint8_t slot) { return "/s" + String(slot + 1) + ".adp"; 
 
 void audioBegin() {
   installWifiSounds();
+  upsampleInit();
+  hpf[0].highPass(SPEAKER_HPF_HZ, 0.5412f);  // Q của Butterworth bậc 4
+  hpf[1].highPass(SPEAKER_HPF_HZ, 1.3066f);
 #if AMP_SD_PIN >= 0
   esp_rom_gpio_pad_select_gpio(AMP_SD_PIN);
   gpio_set_level((gpio_num_t)AMP_SD_PIN, 0);  // ampli tắt tới khi có âm cần phát
@@ -427,13 +515,13 @@ void audioBegin() {
   i2s_chan_config_t chanCfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
   // Hết dữ liệu thì DMA phát mẫu 0 (im lặng) thay vì lặp lại khối cũ
   chanCfg.auto_clear = true;
-  // Bộ đệm DMA ~33ms (mặc định ~65ms): đang phát im lặng thì âm phím vào hàng sau chừng ấy
+  // Bộ đệm DMA ~32ms (mặc định ~65ms): đang phát im lặng thì âm phím vào hàng sau chừng ấy
   chanCfg.dma_desc_num = 6;
-  chanCfg.dma_frame_num = 120;
+  chanCfg.dma_frame_num = 240;  // mẫu ở I2S_RATE
   ESP_ERROR_CHECK(i2s_new_channel(&chanCfg, &tx, nullptr));
 
   i2s_std_config_t cfg = {};
-  cfg.clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(SAMPLE_RATE);
+  cfg.clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(I2S_RATE);
   cfg.clk_cfg.clk_src = I2S_CLK_SRC_PLL_160M;  // xem I2S_MCLK
   // Mono: ESP32-S3 phát cùng một mẫu ở cả kênh trái lẫn phải (slot_mask = BOTH), nên chân
   // SD_MODE chọn kênh nào (trái / phải / trộn) ampli cũng nhận đúng âm

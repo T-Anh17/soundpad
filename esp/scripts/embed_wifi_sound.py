@@ -1,5 +1,6 @@
 # Embed the pre-encoded chimes in firmware: WiFi on/off (IMA ADPCM, *_ADP) and the power-on
-# ding (PCM 16-bit little-endian 22321 Hz mono, BOOT_P16, converted from assets/boot_ding.mp3).
+# ding (PCM 16-bit little-endian 22321 Hz mono, BOOT_P16, converted from assets/boot_ding.mp3 and
+# raised one octave to ~984 Hz: the 492 Hz original sits below what the small speaker can play).
 import os
 
 Import("env")  # noqa: F821 (PlatformIO/SCons cung cấp)

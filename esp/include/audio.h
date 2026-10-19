@@ -7,6 +7,8 @@ enum Tone : uint8_t {
   TONE_WIFI_OFF,
   TONE_VOLUME,
   TONE_BOOT,  // tiếng ding lúc gạt công tắc mở nguồn
+  TONE_TEST_SOFT,  // bản thử: chuỗi tông 400 Hz–4 kHz để đo méo loa (gõ t / T qua Serial)
+  TONE_TEST_LOUD,
 };
 
 void audioBegin();

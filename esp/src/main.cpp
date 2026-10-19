@@ -113,6 +113,15 @@ void loop() {
           wifiIsOn() ? "bat" : "tat", wifiIsOn() ? WiFi.softAPgetStationNum() : 0, ESP.getFreeHeap(),
           batteryMv(), batteryPercent(), esp_reset_reason());
   }
+  // Bản thử: gõ t (nhỏ) / T (to) qua Serial để phát chuỗi tông đo méo loa
+  if (Serial.available()) {
+    int c = Serial.read();
+    if (c == 't' || c == 'T') {
+      markActivity();
+      log_i("Phat chuoi tong thu (%s)", c == 't' ? "nho" : "to");
+      audioTone(c == 't' ? TONE_TEST_SOFT : TONE_TEST_LOUD);
+    }
+  }
 #endif
 
   bool playing = audioBusy();

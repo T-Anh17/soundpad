@@ -85,7 +85,7 @@ Thức dậy từ ngủ sâu:
 |---|---|
 | Bật WiFi | Chuông báo sân bay, giây 1–5 (`esp/assets/wifi_chime.mp3` → `wifi_on.adp`, nhúng vào firmware) |
 | Tắt WiFi | Chuông báo sân bay, giây 9–13 (→ `wifi_off.adp`) |
-| Mở nguồn (gạt công tắc / RST) | Tiếng ding máy bay (`esp/assets/boot_ding.mp3` → `boot_ding.p16`) |
+| Mở nguồn (gạt công tắc / RST) | Tiếng ding máy bay (`esp/assets/boot_ding.mp3` → `boot_ding.p16`, nâng 1 quãng tám lên ~984 Hz cho loa nhỏ) |
 | Đổi âm lượng | Bíp ở mức mới |
 
 Nhấn 1 phím không có âm báo, chỉ phát âm của phím.
@@ -102,7 +102,7 @@ Nhấn 1 phím không có âm báo, chỉ phát âm của phím.
 - Chế độ phím: Đơn (4 ô chọn âm cho phím 1–4) / Ngẫu nhiên.
 - 10 ô âm: tên, độ dài, phím đang dùng, nút Phát thử / Nạp hoặc Đổi (mp3, m4a, wav, hoặc video mp4 / mov) / Xoá.
 - Chọn file xong hiện hộp chọn đoạn: sóng âm, kéo hai đầu hoặc gõ giây Từ / Đến, nghe thử trên điện thoại rồi mới lưu.
-- Trình duyệt tự tách âm thanh khỏi video, đổi định dạng, cắt khoảng lặng, lọc trầm dưới 700 Hz, chỉnh âm cho rõ giọng, nén động nhẹ, chuẩn hoá âm lượng rồi gửi lên dạng PCM 16-bit.
+- Trình duyệt tự tách âm thanh khỏi video, đổi định dạng, cắt khoảng lặng, lọc trầm dưới 700 Hz, chỉnh âm cho rõ giọng, nén động nhẹ, chuẩn hoá âm lượng rồi gửi lên dạng PCM 16-bit. Firmware lọc tiếp mọi âm dưới 1,2 kHz (`SPEAKER_HPF_HZ`) trước khi ra loa: loa nhỏ không phát nổi dải dưới, chỉ ra tiếng rè.
 - Thanh âm lượng (đồng bộ với âm lượng chỉnh bằng phím).
 - Ô âm đang phát sáng viền. Hiện bộ nhớ còn trống và % pin.
 
