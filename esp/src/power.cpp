@@ -9,12 +9,32 @@ namespace {
 
 int mv = 0;
 uint32_t lastRead = 0;
+uint8_t lowReads = 0;  // số lần đo liên tiếp dưới BAT_CRITICAL_MV
 
 int readMv() {
+  // Chạy pin thì mạch chia áp đo pin chỉ có điện khi LCD_POWER_PIN cao (để thấp đọc ra ~0,2 V).
+  // Bật lúc đo rồi tắt lại cho đỡ hao
+  // Nguồn này có tụ: chờ 5ms là đo lúc áp còn đang lên -> ra thấp và nhảy lung tung (pin 3,9V
+  // mà đọc ~3,1V), tưởng pin cạn rồi bỏ qua phím
+  digitalWrite(LCD_POWER_PIN, HIGH);
+  delay(BAT_SETTLE_MS);
+  analogReadMilliVolts(BAT_ADC_PIN);  // bỏ lần đầu
   uint32_t sum = 0;
-  for (int i = 0; i < 8; i++) sum += analogReadMilliVolts(BAT_ADC_PIN);
-  return sum / 8 * 2;  // board chia áp 1/2
+  for (int i = 0; i < 16; i++) sum += analogReadMilliVolts(BAT_ADC_PIN);
+  digitalWrite(LCD_POWER_PIN, LOW);
+  return sum / 16 * 2;  // board chia áp 1/2
 }
+
+void countLow(int reading) {
+  if (reading >= BAT_MIN_VALID_MV && reading < BAT_CRITICAL_MV) {
+    if (lowReads < BAT_CRITICAL_READS) lowReads++;
+  } else {
+    lowReads = 0;
+  }
+}
+
+// Chip còn chạy thì pin không thể dưới mức này -> số đo sai, đừng coi là pin cạn
+bool valid() { return mv >= BAT_MIN_VALID_MV; }
 
 // Điện áp Li-Po lúc nghỉ -> %
 const int16_t CURVE[][2] = {
@@ -33,18 +53,24 @@ void powerBegin() {
   digitalWrite(LCD_BL_PIN, LOW);
 
   mv = readMv();
+  countLow(mv);
   lastRead = millis();
+  log_i("Pin luc khoi dong: %d mV", mv);
 }
 
-void powerUpdate(bool audioBusy) {
-  if (audioBusy || millis() - lastRead < 5000) return;
+void powerUpdate(bool skip) {
+  if (skip || millis() - lastRead < 5000) return;
   lastRead = millis();
-  mv = (mv * 7 + readMv() * 3) / 10;  // làm mượt
+  int reading = readMv();
+  countLow(reading);
+  mv = (mv * 7 + reading * 3) / 10;  // làm mượt
+  if (lowReads) log_w("Pin do duoc %d mV (thap lan %d/%d)", reading, lowReads, BAT_CRITICAL_READS);
 }
 
 int batteryMv() { return mv; }
 
 int batteryPercent() {
+  if (!valid()) return -1;
   if (mv >= CURVE[0][0]) return 100;
   for (size_t i = 1; i < sizeof(CURVE) / sizeof(CURVE[0]); i++) {
     if (mv >= CURVE[i][0]) {
@@ -55,7 +81,8 @@ int batteryPercent() {
   return 0;
 }
 
-bool batteryCritical() { return mv < BAT_CRITICAL_MV; }
+// Một lần đo thấp chưa chắc pin cạn (đo sai, vừa phát to, vừa bật Bluetooth): phải thấp nhiều lần liền
+bool batteryCritical() { return lowReads >= BAT_CRITICAL_READS; }
 
 uint32_t wakeKeyMask() {
   if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_EXT1) return 0;
@@ -63,13 +90,11 @@ uint32_t wakeKeyMask() {
   uint32_t mask = 0;
   for (uint8_t i = 0; i < KEY_COUNT; i++)
     if (gpios & (1ULL << KEY_PINS[i])) mask |= 1u << i;
-  if (gpios & (1ULL << WIFI_KEY_PIN)) mask |= 1u << KEY_COUNT;
   return mask;
 }
 
 void lightSleep(uint32_t maxMs) {
   for (uint8_t i = 0; i < KEY_COUNT; i++) gpio_wakeup_enable((gpio_num_t)KEY_PINS[i], GPIO_INTR_LOW_LEVEL);
-  gpio_wakeup_enable((gpio_num_t)WIFI_KEY_PIN, GPIO_INTR_LOW_LEVEL);
   esp_sleep_enable_gpio_wakeup();
   esp_sleep_enable_timer_wakeup((uint64_t)maxMs * 1000);
 
@@ -77,15 +102,14 @@ void lightSleep(uint32_t maxMs) {
 
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
   for (uint8_t i = 0; i < KEY_COUNT; i++) gpio_wakeup_disable((gpio_num_t)KEY_PINS[i]);
-  gpio_wakeup_disable((gpio_num_t)WIFI_KEY_PIN);
 }
 
 void deepSleep() {
   audioShutdown();
 
   uint64_t mask = 0;
-  for (uint8_t i = 0; i <= KEY_COUNT; i++) {  // 4 phím + nút KEY
-    gpio_num_t pin = (gpio_num_t)(i < KEY_COUNT ? KEY_PINS[i] : WIFI_KEY_PIN);
+  for (uint8_t i = 0; i < KEY_COUNT; i++) {
+    gpio_num_t pin = (gpio_num_t)KEY_PINS[i];
     mask |= 1ULL << pin;
     rtc_gpio_pullup_en(pin);    // giữ điện trở kéo lên khi ngủ sâu
     rtc_gpio_pulldown_dis(pin);

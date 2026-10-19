@@ -1,0 +1,55 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f4f4f5; --card: #fff; --fg: #18181b; --mut: #6b6b74; --line: #e4e4e7; --line-strong: #d4d4d8;
+  --acc: #2563eb; --on-acc: #fff; --ring: #2563eb33; --bad: #c81e1e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0b0e; --card: #17171b; --fg: #f4f4f5; --mut: #a1a1aa; --line: #2a2a30; --line-strong: #3f3f46;
+    --acc: #60a5fa; --on-acc: #0b1220; --ring: #60a5fa40; --bad: #f87171;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 480px; margin: 0 auto; padding: 16px; }
+header { display: flex; justify-content: space-between; align-items: baseline; }
+h1 { font-size: 20px; margin: 4px 0 16px; }
+h2 { font-size: 15px; margin: 18px 2px 8px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.mut { color: var(--mut); font-size: 13px; }
+.err { color: var(--bad); }
+p { margin: 6px 0; }
+
+button { font: inherit; font-size: 14px; border: 1px solid var(--line); background: transparent; color: var(--fg);
+  border-radius: 8px; padding: 7px 11px; cursor: pointer; line-height: 1.2; }
+button:disabled { opacity: .35; cursor: default; }
+.pri { background: var(--acc); border-color: var(--acc); color: var(--on-acc); }
+.big { width: 100%; min-height: 44px; margin-top: 6px; }
+
+.row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.row input[type=range] { flex: 1; min-width: 0; accent-color: var(--acc); height: 32px; }
+.row > b { min-width: 3.4em; text-align: right; font-variant-numeric: tabular-nums; }
+.row > span:first-child { min-width: 2.4em; }
+select { flex: 1; min-width: 0; height: 40px; padding: 0 10px; font: inherit; color: var(--fg);
+  background: var(--card); border: 1px solid var(--line-strong); border-radius: 8px; }
+
+.seg { display: grid; grid-template-columns: 1fr 1fr; margin: 8px 0 6px; border: 1px solid var(--line-strong); border-radius: 9px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; min-height: 40px; }
+.seg button + button { border-left: 1px solid var(--line-strong); }
+.seg button[aria-pressed=true] { background: var(--acc); color: var(--on-acc); }
+
+.slot { display: flex; justify-content: space-between; gap: 10px; align-items: center; transition: border-color .15s, box-shadow .15s; }
+.slot > div:first-child { flex: 1; min-width: 0; }
+.slot.on { border-color: var(--acc); box-shadow: 0 0 0 3px var(--ring); }
+.name { font-weight: 600; overflow-wrap: anywhere; }
+.btns { display: flex; gap: 6px; flex-shrink: 0; }
+.bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+.bar i { display: block; height: 100%; background: var(--acc); }
+
+dialog { width: min(440px, calc(100% - 32px)); padding: 20px; color: var(--fg); background: var(--card);
+  border: 1px solid var(--line); border-radius: 12px; }
+dialog::backdrop { background: rgb(0 0 0 / .4); }
+dialog h2 { margin: 0; font-size: 17px; }
+.wave { display: block; width: 100%; height: 56px; margin-top: 12px; }
+.foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.foot button { min-height: 44px; padding: 0 16px; }

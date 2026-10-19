@@ -8,7 +8,8 @@
   :root {
     --bg: #f6f6f7; --paper: #fff; --fg: #18181b; --mut: #6b6b74; --line: #dedee3;
     --board: #1f2a24; --board-edge: #0f1712; --pin: #d4b25a; --silk: #e9eee9;
-    --w-power: #dc2626; --w-gnd: #27272a; --w-audio: #d97706; --w-key: #2563eb; --w-spk: #7c3aed;
+    --w-power: #dc2626; --w-gnd: #27272a; --w-key: #2563eb; --w-spk: #7c3aed;
+    --w-din: #d97706; --w-bclk: #0d9488; --w-lrc: #db2777; --w-sd: #65a30d;
     --part: #f1f5f9; --part-edge: #94a3b8; --amp: #1e40af; --warn: #ea580c; --ok: #16a34a;
   }
   @media (prefers-color-scheme: dark) {
@@ -16,6 +17,7 @@
       --bg: #0d0d10; --paper: #17171b; --fg: #f1f1f3; --mut: #a0a0aa; --line: #2c2c33;
       --board: #1c3326; --board-edge: #2f5a42; --silk: #dfe8df;
       --w-gnd: #d4d4d8; --part: #23232a; --part-edge: #55556a; --amp: #3b5bdb;
+      --w-din: #f59e0b; --w-bclk: #2dd4bf; --w-lrc: #f472b6; --w-sd: #84cc16;
     }
   }
   * { box-sizing: border-box; }
@@ -55,8 +57,9 @@
   .amp-t { fill: #fff; font-size: 12px; font-weight: 600; }
   .pad { fill: #d1d5db; stroke: #6b7280; stroke-width: 1; }
   .w { fill: none; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
-  .w-power { stroke: var(--w-power); } .w-gnd { stroke: var(--w-gnd); } .w-audio { stroke: var(--w-audio); }
+  .w-power { stroke: var(--w-power); } .w-gnd { stroke: var(--w-gnd); }
   .w-key { stroke: var(--w-key); } .w-spk { stroke: var(--w-spk); }
+  .w-din { stroke: var(--w-din); } .w-bclk { stroke: var(--w-bclk); } .w-lrc { stroke: var(--w-lrc); } .w-sd { stroke: var(--w-sd); }
   .dot { fill: var(--fg); }
   .lbl { font-size: 13px; }
   .lbl-b { font-size: 13px; font-weight: 700; }
@@ -64,9 +67,8 @@
   .lbl-warn { font-size: 12px; font-weight: 700; fill: var(--warn) !important; }
   .key { fill: var(--paper); stroke: var(--fg); stroke-width: 2; }
   .key-in { fill: none; stroke: var(--part-edge); stroke-width: 1.5; }
-  .tag { fill: var(--warn); }
-  .res { fill: #e7d3a8; stroke: #8a6d1f; stroke-width: 1.5; }
-  .cap { fill: #c9a24a; stroke: #7a5a12; stroke-width: 1.5; }
+  .cap { fill: #1f2937; stroke: #9ca3af; stroke-width: 1.5; }
+  .cap-band { fill: #d1d5db; }
   .spk { fill: var(--part); stroke: var(--fg); stroke-width: 2; }
   .bat { fill: #9ca3af; stroke: #4b5563; stroke-width: 1.5; }
 </style>
@@ -74,7 +76,7 @@
 <body>
 <main>
   <h1>SoundPad: sơ đồ nối dây</h1>
-  <p class="sub">LilyGO T-Display-S3 (đã tháo màn hình) · 4 switch phím cơ · ampli HXJ8002 · loa mini · pin Li-Po 500 mAh</p>
+  <p class="sub">LilyGO T-Display-S3 (đã tháo màn hình) · 4 switch phím cơ · ampli I2S MAX98357A · loa mini · pin Li-Po 500 mAh</p>
 
   <!-- ================= SƠ ĐỒ TỔNG ================= -->
   <div class="card scroll">
@@ -94,9 +96,9 @@
         <circle class="pin-used" cx="440" cy="214" r="7"/><text class="silk" x="455" y="219">2</text>
         <circle class="pin-used" cx="440" cy="246" r="7"/><text class="silk" x="455" y="251">3</text>
         <circle class="pin-used" cx="440" cy="278" r="7"/><text class="silk" x="455" y="283">10</text>
-        <circle class="pin" cx="440" cy="310" r="7"/><text class="silk" x="455" y="315">11</text>
-        <circle class="pin" cx="440" cy="342" r="7"/><text class="silk" x="455" y="347">12</text>
-        <circle class="pin" cx="440" cy="374" r="7"/><text class="silk" x="455" y="379">13</text>
+        <circle class="pin-used" cx="440" cy="310" r="7"/><text class="silk" x="455" y="315">11</text>
+        <circle class="pin-used" cx="440" cy="342" r="7"/><text class="silk" x="455" y="347">12</text>
+        <circle class="pin-used" cx="440" cy="374" r="7"/><text class="silk" x="455" y="379">13</text>
         <circle class="pin" cx="440" cy="406" r="7"/><text class="silk-s" x="455" y="410">NC</text>
         <circle class="pin" cx="440" cy="438" r="7"/><text class="silk-s" x="455" y="442">NC</text>
         <circle class="pin" cx="440" cy="470" r="7"/><text class="silk" x="455" y="475">GND</text>
@@ -108,19 +110,15 @@
         <circle class="pin" cx="560" cy="182" r="7"/><text class="silk" x="545" y="187" text-anchor="end">GND</text>
         <circle class="pin" cx="560" cy="214" r="7"/><text class="silk" x="545" y="219" text-anchor="end">43</text>
         <circle class="pin" cx="560" cy="246" r="7"/><text class="silk" x="545" y="251" text-anchor="end">44</text>
-        <circle class="pin" cx="560" cy="278" r="7"/><text class="silk" x="545" y="283" text-anchor="end">18</text>
+        <circle class="pin-used" cx="560" cy="278" r="7"/><text class="silk" x="545" y="283" text-anchor="end">18</text>
         <circle class="pin" cx="560" cy="310" r="7"/><text class="silk" x="545" y="315" text-anchor="end">17</text>
         <circle class="pin" cx="560" cy="342" r="7"/><text class="silk" x="545" y="347" text-anchor="end">21</text>
-        <circle class="pin-used" cx="560" cy="374" r="7"/><text class="silk" x="545" y="379" text-anchor="end">16</text>
+        <circle class="pin" cx="560" cy="374" r="7"/><text class="silk" x="545" y="379" text-anchor="end">16</text>
         <circle class="pin" cx="560" cy="406" r="7"/><text class="silk-s" x="545" y="410" text-anchor="end">NC</text>
-        <circle class="pin-used" cx="560" cy="438" r="7"/><text class="silk" x="545" y="443" text-anchor="end">GND</text>
+        <circle class="pin" cx="560" cy="438" r="7"/><text class="silk" x="545" y="443" text-anchor="end">GND</text>
         <circle class="pin" cx="560" cy="470" r="7"/><text class="silk" x="545" y="475" text-anchor="end">GND</text>
-        <circle class="pin-used" cx="560" cy="502" r="7"/><text class="silk" x="545" y="507" text-anchor="end">3V</text>
+        <circle class="pin" cx="560" cy="502" r="7"/><text class="silk" x="545" y="507" text-anchor="end">3V</text>
       </g>
-
-      <!-- GPIO12 để trống -->
-      <rect class="tag" x="352" y="333" width="76" height="18" rx="4"/>
-      <text x="390" y="346" text-anchor="middle" style="fill:#fff;font-size:11px;font-weight:700">ĐỂ TRỐNG</text>
 
       <!-- ---------- 4 phím ---------- -->
       <g>
@@ -158,42 +156,55 @@
         <text class="lbl-s" x="120" y="392" text-anchor="middle">chân trên → GPIO · chân dưới → GND</text>
       </g>
 
-      <!-- ---------- Âm thanh: GPIO16 → 1kΩ → R, tụ 15nF xuống GND ---------- -->
-      <path class="w w-audio" d="M567 374 H598 V578 H342 V600 H372"/>
-      <rect class="res" x="372" y="592" width="36" height="16" rx="5"/>
-      <text class="lbl" x="390" y="586" text-anchor="middle">1kΩ</text>
-      <path class="w w-audio" d="M408 600 H435 V630"/>
-      <circle class="dot" cx="435" cy="610" r="3.5"/>
-      <path class="w w-gnd" d="M435 610 H400 V614"/>
-      <rect class="cap" x="391" y="614" width="18" height="10" rx="2"/>
-      <path class="w w-gnd" d="M400 624 V630"/>
-      <text class="lbl" x="352" y="626" text-anchor="end">tụ 15nF</text>
-      <text class="lbl-s" x="352" y="644" text-anchor="end">(mã 153)</text>
+      <!-- ---------- I2S: 11 → DIN, 12 → BCLK, 13 → LRC (cung nhỏ = dây vắt qua, không nối) ---------- -->
+      <path class="w w-lrc" d="M433 374 H316 V662"/>
+      <path class="w w-bclk" d="M433 342 H356 V368 a6 6 0 0 1 0 12 V662"/>
+      <path class="w w-din" d="M433 310 H396 V336 a6 6 0 0 1 0 12 V368 a6 6 0 0 1 0 12 V662"/>
 
-      <!-- ---------- Nguồn ampli ---------- -->
-      <path class="w w-gnd" d="M567 438 H615 V595 H470 V630"/>
-      <path class="w w-power" d="M567 502 H650 V612 H505 V630"/>
+      <!-- ---------- SD: 18 → SD ---------- -->
+      <path class="w w-sd" d="M567 278 H612 V608 H476 V662"/>
 
-      <!-- ---------- Ampli HXJ8002 ---------- -->
-      <rect class="amp" x="380" y="630" width="170" height="86" rx="6"/>
-      <circle class="pad" cx="400" cy="640" r="6"/><circle class="pad" cx="435" cy="640" r="6"/>
-      <circle class="pad" cx="470" cy="640" r="6"/><circle class="pad" cx="505" cy="640" r="6"/>
-      <text class="amp-t" x="400" y="662" text-anchor="middle">GND</text>
-      <text class="amp-t" x="435" y="662" text-anchor="middle">R</text>
-      <text class="amp-t" x="470" y="662" text-anchor="middle">GND</text>
-      <text class="amp-t" x="505" y="662" text-anchor="middle">VCC</text>
-      <text class="amp-t" x="455" y="700" text-anchor="middle" style="font-size:13px">HXJ8002</text>
-      <circle class="pad" cx="540" cy="660" r="6"/><circle class="pad" cx="540" cy="694" r="6"/>
-      <text class="amp-t" x="527" y="700" text-anchor="end" style="font-size:10px;font-weight:400">loa</text>
+      <!-- ---------- Nguồn ampli: thẳng từ pin, không qua board ---------- -->
+      <path class="w w-power" d="M760 380 H640 V632 H556 V662"/>
+      <circle class="dot" cx="760" cy="380" r="3.5"/>
+      <text class="lbl-s" x="700" y="372" text-anchor="middle">→ VIN ampli</text>
+      <path class="w w-gnd" d="M800 446 V620 H646 a6 6 0 0 0 -12 0 H516 V662"/>
+      <circle class="dot" cx="800" cy="446" r="3.5"/>
+      <text class="lbl-s" x="808" y="540">→ GND ampli</text>
+      <!-- tụ hoá VIN–GND, vạch sáng là cực (−) -->
+      <path d="M516 650 H526 M546 650 H556" stroke="var(--fg)" stroke-width="2"/>
+      <rect class="cap" x="526" y="644" width="20" height="12" rx="3"/>
+      <rect class="cap-band" x="528" y="645" width="4" height="10"/>
+      <circle class="dot" cx="516" cy="650" r="3.5"/><circle class="dot" cx="556" cy="650" r="3.5"/>
+      <text class="lbl-s" x="564" y="648">tụ 100–470µF</text>
+
+      <!-- ---------- Ampli MAX98357A ---------- -->
+      <rect class="amp" x="292" y="656" width="360" height="82" rx="6"/>
+      <circle class="pad" cx="316" cy="668" r="6"/><circle class="pad" cx="356" cy="668" r="6"/>
+      <circle class="pad" cx="396" cy="668" r="6"/><circle class="pad" cx="436" cy="668" r="6"/>
+      <circle class="pad" cx="476" cy="668" r="6"/><circle class="pad" cx="516" cy="668" r="6"/>
+      <circle class="pad" cx="556" cy="668" r="6"/>
+      <text class="amp-t" x="316" y="690" text-anchor="middle" style="font-size:11px">LRC</text>
+      <text class="amp-t" x="356" y="690" text-anchor="middle" style="font-size:11px">BCLK</text>
+      <text class="amp-t" x="396" y="690" text-anchor="middle" style="font-size:11px">DIN</text>
+      <text class="amp-t" x="436" y="690" text-anchor="middle" style="font-size:11px">GAIN</text>
+      <text class="amp-t" x="476" y="690" text-anchor="middle" style="font-size:11px">SD</text>
+      <text class="amp-t" x="516" y="690" text-anchor="middle" style="font-size:11px">GND</text>
+      <text class="amp-t" x="556" y="690" text-anchor="middle" style="font-size:11px">VIN</text>
+      <text class="lbl-s" x="436" y="652" text-anchor="middle">để trống</text>
+      <text class="amp-t" x="436" y="724" text-anchor="middle" style="font-size:13px">MAX98357A</text>
+      <circle class="pad" cx="636" cy="700" r="6"/><circle class="pad" cx="636" cy="724" r="6"/>
+      <text class="amp-t" x="624" y="704" text-anchor="end">+</text>
+      <text class="amp-t" x="624" y="728" text-anchor="end">−</text>
 
       <!-- ---------- Loa ---------- -->
-      <path class="w w-spk" d="M546 660 H700 V672"/>
-      <path class="w w-spk" d="M546 694 H700 V690"/>
-      <rect class="spk" x="700" y="662" width="20" height="38" rx="2"/>
-      <path class="spk" d="M720 662 L752 640 V722 L720 700 Z"/>
-      <text class="lbl-b" x="770" y="676">Loa mini</text>
-      <text class="lbl-warn" x="770" y="694">không nối chân loa</text>
-      <text class="lbl-warn" x="770" y="709">nào xuống GND</text>
+      <path class="w w-spk" d="M642 700 H720"/>
+      <path class="w w-spk" d="M642 724 H720"/>
+      <rect class="spk" x="720" y="690" width="20" height="40" rx="2"/>
+      <path class="spk" d="M740 690 L772 668 V752 L740 730 Z"/>
+      <text class="lbl-b" x="790" y="700">Loa mini</text>
+      <text class="lbl-warn" x="790" y="718">không nối chân loa</text>
+      <text class="lbl-warn" x="790" y="733">nào xuống GND</text>
 
       <!-- ---------- Pin + công tắc ---------- -->
       <text class="lbl-b" x="800" y="140" text-anchor="middle">Pin Li-Po 3.7V 500 mAh</text>
@@ -225,14 +236,17 @@
       <span><i class="sw" style="background:var(--w-power)"></i>Nguồn (+)</span>
       <span><i class="sw" style="background:var(--w-gnd)"></i>GND (−)</span>
       <span><i class="sw" style="background:var(--w-key)"></i>Phím → GPIO</span>
-      <span><i class="sw" style="background:var(--w-audio)"></i>Tín hiệu âm thanh</span>
+      <span><i class="sw" style="background:var(--w-din)"></i>DIN</span>
+      <span><i class="sw" style="background:var(--w-bclk)"></i>BCLK</span>
+      <span><i class="sw" style="background:var(--w-lrc)"></i>LRC</span>
+      <span><i class="sw" style="background:var(--w-sd)"></i>SD (bật/tắt ampli)</span>
       <span><i class="sw" style="background:var(--w-spk)"></i>Ra loa</span>
-      <span>● = điểm nối · dây cắt nhau không có ● là không nối</span>
+      <span>● = điểm nối · dây cắt nhau hoặc vắt qua (cung nhỏ) mà không có ● là không nối</span>
     </div>
     <p class="note">
       Board vẽ <b>nhìn từ mặt sau</b> (mặt có chip, anten ở trên, cổng USB-C ở dưới), theo sơ đồ chân chính thức của LilyGO.
       Lật board sang mặt trước thì 2 hàng chân đổi bên, nên <b>luôn làm theo số in trên board</b>.
-      Thứ tự 4 lỗ trên module ampli có thể khác hình, nên làm theo chữ in trên module.
+      Thứ tự chân trên module ampli có thể khác hình, nên làm theo chữ in trên module.
     </p>
   </div>
 
@@ -246,14 +260,17 @@
       <tr><td>3</td><td>Phím [3], chân thứ nhất</td><td>Board <b>3</b></td><td><i class="sw" style="background:var(--w-key)"></i></td><td></td></tr>
       <tr><td>4</td><td>Phím [4], chân thứ nhất</td><td>Board <b>10</b></td><td><i class="sw" style="background:var(--w-key)"></i></td><td></td></tr>
       <tr><td>5</td><td>Chân thứ hai của cả 4 phím</td><td>Board <b>GND</b></td><td><i class="sw" style="background:var(--w-gnd)"></i></td><td>1 dây chạy qua cả 4 phím rồi về GND</td></tr>
-      <tr><td>6</td><td>Board <b>16</b></td><td>Điện trở 1kΩ → ampli <b>R</b></td><td><i class="sw" style="background:var(--w-audio)"></i></td><td>Điện trở hàn ngay trên dây, gần ampli</td></tr>
-      <tr><td>7</td><td>Ampli <b>R</b></td><td>Ampli <b>GND</b> (lỗ cạnh R)</td><td>tụ</td><td>Tụ gốm 15nF (mã <code>153</code>), hàn thẳng trên module</td></tr>
-      <tr><td>8</td><td>Board <b>3V</b></td><td>Ampli <b>VCC</b></td><td><i class="sw" style="background:var(--w-power)"></i></td><td></td></tr>
-      <tr><td>9</td><td>Board <b>GND</b></td><td>Ampli <b>GND</b></td><td><i class="sw" style="background:var(--w-gnd)"></i></td><td></td></tr>
-      <tr><td>10</td><td>Ampli, 2 lỗ ra loa</td><td>2 dây loa</td><td><i class="sw" style="background:var(--w-spk)"></i></td><td>Đảo chiều cũng được. <span class="warn">Không nối xuống GND</span></td></tr>
-      <tr><td>11</td><td>Pin (+) dây đỏ</td><td>Công tắc → đầu cắm (+)</td><td><i class="sw" style="background:var(--w-power)"></i></td><td>Cắt dây đỏ, hàn công tắc vào giữa</td></tr>
-      <tr><td>12</td><td>Pin (−) dây đen</td><td>Đầu cắm (−)</td><td><i class="sw" style="background:var(--w-gnd)"></i></td><td>Giữ nguyên</td></tr>
-      <tr><td>–</td><td>Board <b>12</b></td><td colspan="3"><span class="warn">Để trống</span>: firmware giữ mức thấp, xung PDM chỉ chạy bên trong chip</td></tr>
+      <tr><td>6</td><td>Board <b>11</b></td><td>Ampli <b>DIN</b></td><td><i class="sw" style="background:var(--w-din)"></i></td><td>Dữ liệu âm thanh</td></tr>
+      <tr><td>7</td><td>Board <b>12</b></td><td>Ampli <b>BCLK</b></td><td><i class="sw" style="background:var(--w-bclk)"></i></td><td>Xung nhịp bit</td></tr>
+      <tr><td>8</td><td>Board <b>13</b></td><td>Ampli <b>LRC</b></td><td><i class="sw" style="background:var(--w-lrc)"></i></td><td>Có module in là <code>LRCLK</code> hoặc <code>WS</code></td></tr>
+      <tr><td>9</td><td>Board <b>18</b></td><td>Ampli <b>SD</b></td><td><i class="sw" style="background:var(--w-sd)"></i></td><td>Firmware kéo thấp = ampli tắt khi rảnh và lúc ngủ. Chưa nối thì đặt <code>AMP_SD_PIN -1</code></td></tr>
+      <tr><td>10</td><td>Pin (+), <b>sau công tắc</b></td><td>Ampli <b>VIN</b></td><td><i class="sw" style="background:var(--w-power)"></i></td><td><span class="warn">Không lấy 3V của board</span>: lúc kêu to ampli kéo dòng lớn làm sụt 3V3, tiếng méo hoặc board tự khởi động lại</td></tr>
+      <tr><td>11</td><td>Pin (−)</td><td>Ampli <b>GND</b></td><td><i class="sw" style="background:var(--w-gnd)"></i></td><td>Dây riêng về (−) pin, không đi qua board</td></tr>
+      <tr><td>12</td><td>Ampli <b>VIN</b></td><td>Ampli <b>GND</b></td><td>tụ</td><td>Tụ hoá 100–470µF hàn thẳng trên module, <span class="warn">đúng cực</span>: chân dài (+) vào VIN</td></tr>
+      <tr><td>13</td><td>Ampli <b>+</b> / <b>−</b></td><td>2 dây loa</td><td><i class="sw" style="background:var(--w-spk)"></i></td><td>Đảo chiều cũng được. <span class="warn">Không nối dây loa nào xuống GND</span></td></tr>
+      <tr><td>14</td><td>Pin (+) dây đỏ</td><td>Công tắc → đầu cắm (+)</td><td><i class="sw" style="background:var(--w-power)"></i></td><td>Cắt dây đỏ, hàn công tắc vào giữa</td></tr>
+      <tr><td>15</td><td>Pin (−) dây đen</td><td>Đầu cắm (−)</td><td><i class="sw" style="background:var(--w-gnd)"></i></td><td>Giữ nguyên</td></tr>
+      <tr><td>–</td><td>Ampli <b>GAIN</b></td><td colspan="3">Để trống = tăng 9 dB</td></tr>
       <tr><td>–</td><td>Board <b>5V</b></td><td colspan="3">Không dùng, chỉ có điện khi cắm USB</td></tr>
     </table>
   </div>
@@ -262,26 +279,39 @@
   <h2>Chi tiết từng phần</h2>
   <div class="grid">
     <div class="card">
-      <h3>① Mạch lọc âm thanh</h3>
-      <svg viewBox="0 0 320 170" role="img" aria-label="Mạch lọc RC">
-        <text class="lbl-b" x="12" y="62">GPIO 16</text>
-        <path class="w w-audio" d="M70 58 H110"/>
-        <rect class="res" x="110" y="48" width="56" height="20" rx="6"/>
-        <rect x="122" y="48" width="5" height="20" fill="#7c4a1e"/><rect x="134" y="48" width="5" height="20" fill="#111"/><rect x="146" y="48" width="5" height="20" fill="#c81e1e"/><rect x="156" y="48" width="4" height="20" fill="#c9a227"/>
-        <text class="lbl" x="138" y="40" text-anchor="middle">1kΩ</text>
-        <path class="w w-audio" d="M166 58 H262"/>
-        <circle class="dot" cx="214" cy="58" r="4"/>
-        <text class="lbl-b" x="268" y="62">R</text>
-        <text class="lbl-s" x="268" y="78">ampli</text>
-        <path class="w w-gnd" d="M214 58 V92"/>
-        <path d="M196 92 H232 M196 102 H232" stroke="var(--fg)" stroke-width="3"/>
-        <path class="w w-gnd" d="M214 102 V130 H262"/>
-        <text class="lbl" x="240" y="101">15nF</text>
-        <text class="lbl-b" x="268" y="134">GND</text>
-        <text class="lbl-s" x="268" y="150">ampli</text>
+      <h3>① Ampli MAX98357A</h3>
+      <svg viewBox="0 0 320 170" role="img" aria-label="Nối chân ampli MAX98357A">
+        <text class="lbl-s" x="160" y="14" text-anchor="middle">số = chân GPIO trên board</text>
+        <path class="w w-lrc" d="M40 86 V44"/><text class="lbl-b" x="40" y="36" text-anchor="middle">13</text>
+        <path class="w w-bclk" d="M80 86 V44"/><text class="lbl-b" x="80" y="36" text-anchor="middle">12</text>
+        <path class="w w-din" d="M120 86 V44"/><text class="lbl-b" x="120" y="36" text-anchor="middle">11</text>
+        <text class="lbl-s" x="160" y="72" text-anchor="middle">trống</text>
+        <path class="w w-sd" d="M200 86 V44"/><text class="lbl-b" x="200" y="36" text-anchor="middle">18</text>
+        <path class="w w-gnd" d="M240 86 V44"/><text class="lbl-s" x="240" y="36" text-anchor="middle">pin −</text>
+        <path class="w w-power" d="M280 86 V44"/><text class="lbl-s" x="280" y="36" text-anchor="middle">pin +</text>
+        <path d="M240 62 H250 M270 62 H280" stroke="var(--fg)" stroke-width="2"/>
+        <rect class="cap" x="250" y="56" width="20" height="12" rx="3"/>
+        <rect class="cap-band" x="252" y="57" width="4" height="10"/>
+        <circle class="dot" cx="240" cy="62" r="3.5"/><circle class="dot" cx="280" cy="62" r="3.5"/>
+        <rect class="amp" x="16" y="80" width="288" height="68" rx="6"/>
+        <circle class="pad" cx="40" cy="92" r="6"/><circle class="pad" cx="80" cy="92" r="6"/>
+        <circle class="pad" cx="120" cy="92" r="6"/><circle class="pad" cx="160" cy="92" r="6"/>
+        <circle class="pad" cx="200" cy="92" r="6"/><circle class="pad" cx="240" cy="92" r="6"/>
+        <circle class="pad" cx="280" cy="92" r="6"/>
+        <text class="amp-t" x="40" y="114" text-anchor="middle" style="font-size:10.5px">LRC</text>
+        <text class="amp-t" x="80" y="114" text-anchor="middle" style="font-size:10.5px">BCLK</text>
+        <text class="amp-t" x="120" y="114" text-anchor="middle" style="font-size:10.5px">DIN</text>
+        <text class="amp-t" x="160" y="114" text-anchor="middle" style="font-size:10.5px">GAIN</text>
+        <text class="amp-t" x="200" y="114" text-anchor="middle" style="font-size:10.5px">SD</text>
+        <text class="amp-t" x="240" y="114" text-anchor="middle" style="font-size:10.5px">GND</text>
+        <text class="amp-t" x="280" y="114" text-anchor="middle" style="font-size:10.5px">VIN</text>
+        <text class="amp-t" x="160" y="138" text-anchor="middle">MAX98357A</text>
+        <text class="lbl-s" x="160" y="166" text-anchor="middle">2 lỗ loa + / − ở cạnh đối diện</text>
       </svg>
-      <p class="note">Điện trở 1kΩ có vạch màu <b>nâu, đen, đỏ</b>. Tụ gốm 15nF in mã <code>153</code>, không phân cực.
-        Tụ hàn sát chân R của ampli để lọc nhiễu tần số cao trước khi vào ampli.</p>
+      <p class="note">VIN lấy thẳng (+) pin <b>sau công tắc</b>, GND về (−) pin bằng dây riêng.
+        Tụ hoá 100–470µF hàn sát VIN–GND: chân dài (+) vào VIN, vạch trên thân (−) vào GND.
+        GAIN để trống = 9 dB (nối GND = 12 dB, GND qua 100kΩ = 15 dB, VIN = 6 dB, VIN qua 100kΩ = 3 dB);
+        âm lượng tối đa chỉnh bằng <code>VOLUME_MAX_GAIN</code> trong <code>esp/include/config.h</code>.</p>
     </div>
 
     <div class="card">
@@ -330,13 +360,12 @@
   <div class="card">
     <ul class="check">
       <li>Pin đúng cực: dây đỏ vào <b>+</b> của cổng pin. <span class="warn">Cắm ngược có thể cháy board.</span></li>
-      <li>Hai dây loa chỉ nối vào 2 lỗ ra loa của ampli, <span class="warn">không chạm GND</span>.</li>
-      <li>Chân <b>12</b> để trống, không nối gì.</li>
-      <li>Ampli VCC nối <b>3V</b>, không nối 5V.</li>
-      <li>Đã có tụ 15nF giữa R và GND của ampli.</li>
-      <li>Đo bằng đồng hồ (thang Ω): giữa 3V và GND <b>không bị chập</b>.</li>
-      <li>Lần đầu nạp bản debug (<code>pio run -e soundpad-debug -t upload -j 2</code>), cắm USB, chưa cắm pin. Nhấn từng phím xem log.</li>
-      <li>Nên gỡ đèn LED nhỏ trên module ampli để đỡ hao pin khi chờ (không bắt buộc).</li>
+      <li>Hai dây loa chỉ nối vào <b>+</b> và <b>−</b> của ampli, <span class="warn">không chạm GND</span>.</li>
+      <li>Ampli VIN nối (+) pin <b>sau công tắc</b>, không nối 3V hay 5V của board. GND ampli về (−) pin bằng dây riêng.</li>
+      <li>Đã có tụ 100–470µF giữa VIN và GND của ampli, <b>đúng cực</b>.</li>
+      <li>DIN, BCLK, LRC, SD nối đúng chân <b>11</b>, <b>12</b>, <b>13</b>, <b>18</b>. Chân GAIN để trống.</li>
+      <li>Đo bằng đồng hồ (thang Ω): giữa 3V và GND, giữa VIN và GND của ampli <b>không bị chập</b>.</li>
+      <li>Lần đầu nạp bản debug (<code>pio run -e soundpad-debug -t upload -j 2</code>), cắm USB, chưa cắm pin. Nhấn từng phím xem log (chưa có pin thì ampli chưa có điện, loa chưa kêu).</li>
     </ul>
   </div>
 </main>
